@@ -30,7 +30,7 @@ Create a new user for authenticating with the conversation API.
 *Success Response*
 * `id`[string]: A user ID that serves as an authentication token for the API
 
-### GET /users/<user id>
+### GET /users/:id
 
 Returns a response indicating if the provided user ID exists (204) or not (404).
 
@@ -48,7 +48,7 @@ tongue of your animals.
 
 *Success Response*: A list response of `mood`s
 
-### PUT /moods/<mood name>
+### PUT /moods/:name
 
 Create or update a mood. You can only update moods you created.
 
@@ -56,13 +56,13 @@ Create or update a mood. You can only update moods you created.
 * `eyes`[string]: A two character string for the animal's eyes.
 * `tongue`[string]: A two character string representing the animal's tongue.
 
-### GET /moods/<mood name>
+### GET /moods/:name
 
 Retrieve an existing mood.
 
 *Success Response*: A mood
 
-### DELETE /moods/<mood name>
+### DELETE /moods/:name
 
 Permanently delete a mood that you created.
 
@@ -72,7 +72,7 @@ Returns a list of your conversations.
 
 *Success Response*: A list response of `conversation`s without their `line`s.
 
-### PUT /conversations/<conversation name>
+### PUT /conversations/:name
 
 Creates a new conversation with the specified name for your user account.
 
@@ -80,17 +80,17 @@ Creates a new conversation with the specified name for your user account.
 
 *Success Response*: A `conversation`
 
-### GET /conversations/<conversation name>
+### GET /conversations/:name
 
 Retrieves an existing conversation. 
 
 *Success Response*: A `conversation`
 
-### DELETE /conversations/<conversation name>
+### DELETE /conversations/:name
 
 Deletes the conversation permananently.
 
-### POST /conversations/<conversation name>/lines
+### POST /conversations/:name/lines
 
 Add a new line to the conversation
 
@@ -98,13 +98,13 @@ Add a new line to the conversation
 * `animal`[string]: Name of the animal to speak.
 * `mood`[string]: Customize the tongue and eyes of the animal to its mood. 
 
-### GET /conversations/<conversation name>/lines/<line id>
+### GET /conversations/:name/lines/:id
 
 Retrieves a line from the conversation
 
 *Success Response*: A line
 
-### DELETE /conversations/<conversation name>/lines/<line id>
+### DELETE /conversations/:name/lines/:id
 
 Permanently deletes a line from the conversation.
 
