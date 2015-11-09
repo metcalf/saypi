@@ -4,9 +4,11 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/codahale/http-handlers/recovery"
 	"github.com/jmoiron/sqlx"
 	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/dbutil"
+	"github.com/metcalf/saypi/log"
 	"github.com/metcalf/saypi/mux"
 )
 
@@ -44,11 +46,11 @@ func New(config *Configuration) (*App, error) {
 	authCtrl := auth.New(config.UserSecret)
 
 	mainMux := mux.New()
-	privMux := mux.New()
-	mainMux.NotFoundHandler = authCtrl.WrapC(privMux)
-
 	mainMux.RouteFuncC(mux.Pattern("POST", "/users"), authCtrl.CreateUser)
 	mainMux.RouteFuncC(mux.Pattern("GET", "/users/:id"), authCtrl.GetUser)
+
+	privMux := mux.New()
+	mainMux.NotFoundHandler = authCtrl.WrapC(privMux)
 
 	/*
 		privMux.RouteFuncC(mux.Pattern("GET", "/animals"), sayCtrl.GetAnimals)
@@ -68,8 +70,13 @@ func New(config *Configuration) (*App, error) {
 		privMux.RouteFuncC(mux.Pattern("DELETE", "/conversations/:name/lines/:id"), sayCtrl.DeleteLine)
 	*/
 
-	// TODO: Wrap with error handling and logging
-	app.Srv = mainMux
+	mw := mux.NewMiddleware()
+	mw.Add(func(h http.Handler) http.Handler {
+		return recovery.Wrap(h, recovery.LogOnPanic)
+	})
+	mw.AddC(log.WrapC)
+
+	app.Srv = mw.Wrap(mainMux)
 
 	return &app, nil
 }

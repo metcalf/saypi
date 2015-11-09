@@ -9,12 +9,12 @@ import (
 )
 
 const (
-	urlVarKey = "URLVars"
+	urlVarKey = "mux.Vars"
 )
 
-// URLVar returns the URL path variable corresponding to key from the
+// VarFromContext returns the URL path variable corresponding to key from the
 // request context.
-func URLVar(ctx context.Context, key string) ([]string, bool) {
+func VarFromContext(ctx context.Context, key string) ([]string, bool) {
 	vars, ok := ctx.Value(urlVarKey).(url.Values)
 	if !ok {
 		return nil, false
@@ -29,10 +29,16 @@ type HandlerC interface {
 	ServeHTTPC(context.Context, http.ResponseWriter, *http.Request)
 }
 
-type handlerC struct{ http.Handler }
+type handlerWithC struct{ http.Handler }
 
-func (h handlerC) ServeHTTPC(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+func (h handlerWithC) ServeHTTPC(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	h.ServeHTTP(w, r)
+}
+
+type handlerWithoutC struct{ HandlerC }
+
+func (h handlerWithoutC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.ServeHTTPC(context.TODO(), w, r)
 }
 
 // HandlerFuncC is an analog of http.HandlerFunc with a context parameter
@@ -77,12 +83,12 @@ func (m *Mux) RouteFuncC(matcher Matcher, handler HandlerFuncC) {
 
 // Route adds a new route to an http.Handler, losing the request context.
 func (m *Mux) Route(matcher Matcher, handler http.Handler) {
-	m.routes = append(m.routes, &route{matcher, handlerC{handler}})
+	m.routes = append(m.routes, &route{matcher, handlerWithC{handler}})
 }
 
 // RouteFunc adds a new route to an http.HandlerFunc, losing the request context.
 func (m *Mux) RouteFunc(matcher Matcher, handler http.HandlerFunc) {
-	m.routes = append(m.routes, &route{matcher, handlerC{handler}})
+	m.routes = append(m.routes, &route{matcher, handlerWithC{handler}})
 }
 
 // ServeHTTPC dispatches the request to the handler in the matched

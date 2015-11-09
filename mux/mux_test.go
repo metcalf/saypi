@@ -80,7 +80,7 @@ func TestPatternMatch(t *testing.T) {
 		t.Fatal("Expected pattern to match")
 	}
 
-	vars, ok := URLVar(ctx, "foo")
+	vars, ok := VarFromContext(ctx, "foo")
 	if !ok {
 		t.Error("Expected context to contain URL variable 'foo'")
 	} else if want := []string{"bar", "baz"}; !reflect.DeepEqual(vars, want) {
