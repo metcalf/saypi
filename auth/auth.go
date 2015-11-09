@@ -45,12 +45,12 @@ func (c *Controller) CreateUser(ctx context.Context, w http.ResponseWriter, r *h
 }
 
 func (c *Controller) GetUser(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	auth, ok := mux.GetURLVar(ctx, "id")
+	auth, ok := mux.URLVar(ctx, "id")
 	if !ok {
 		panic("GetUser called without an `id` URL Var")
 	}
 
-	if c.getUser(auth) != "" {
+	if c.getUser(auth[0]) != "" {
 		w.WriteHeader(204)
 	} else {
 		http.NotFound(w, r)

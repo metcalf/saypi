@@ -46,25 +46,25 @@ func New(config *Configuration) (*App, error) {
 	privMux := mux.New()
 	mainMux.NotFoundHandler = authCtrl.WrapC(privMux)
 
-	mainMux.RouteFuncC("POST", "/users", authCtrl.CreateUser)
-	mainMux.RouteFuncC("GET", "/users/:id", authCtrl.GetUser)
+	mainMux.RouteFuncC(mux.Pattern("POST", "/users"), authCtrl.CreateUser)
+	mainMux.RouteFuncC(mux.Pattern("GET", "/users/:id"), authCtrl.GetUser)
 
 	/*
-		privMux.RouteFuncC("GET", "/animals", sayCtrl.GetAnimals)
+		privMux.RouteFuncC(mux.Pattern("GET", "/animals"), sayCtrl.GetAnimals)
 
-		privMux.RouteFuncC("GET", "/moods", sayCtrl.ListMoods)
-		privMux.RouteFuncC("PUT", "/moods/:name", sayCtrl.SetMood)
-		privMux.RouteFuncC("GET", "/moods/:name", sayCtrl.GetMood)
-		privMux.RouteFuncC("DELETE", "/moods/:name", sayCtrl.DeleteMood)
+		privMux.RouteFuncC(mux.Pattern("GET", "/moods"), sayCtrl.ListMoods)
+		privMux.RouteFuncC(mux.Pattern("PUT", "/moods/:name"), sayCtrl.SetMood)
+		privMux.RouteFuncC(mux.Pattern("GET", "/moods/:name"), sayCtrl.GetMood)
+		privMux.RouteFuncC(mux.Pattern("DELETE", "/moods/:name"), sayCtrl.DeleteMood)
 
-		privMux.RouteFuncC("GET", "/conversations", sayCtrl.ListConversations)
-		privMux.RouteFuncC("PUT", "/conversations/:name", sayCtrl.SetConversation)
-		privMux.RouteFuncC("GET", "/conversations/:name", sayCtrl.GetConversation)
-		privMux.RouteFuncC("DELETE", "/conversations/:name", sayCtrl.DeleteConversation)
+		privMux.RouteFuncC(mux.Pattern("GET", "/conversations"), sayCtrl.ListConversations)
+		privMux.RouteFuncC(mux.Pattern("PUT", "/conversations/:name"), sayCtrl.SetConversation)
+		privMux.RouteFuncC(mux.Pattern("GET", "/conversations/:name"), sayCtrl.GetConversation)
+		privMux.RouteFuncC(mux.Pattern("DELETE", "/conversations/:name"), sayCtrl.DeleteConversation)
 
-		privMux.RouteFuncC("POST", "/conversations/:name/lines", sayCtrl.CreateLine)
-		privMux.RouteFuncC("GET", "/conversations/:name/lines/:id", sayCtrl.GetLine)
-		privMux.RouteFunc("DELETE", "/conversations/:name/lines/:id", sayCtrl.DeleteLine)
+		privMux.RouteFuncC(mux.Pattern("POST", "/conversations/:name/lines"), sayCtrl.CreateLine)
+		privMux.RouteFuncC(mux.Pattern("GET", "/conversations/:name/lines/:id"), sayCtrl.GetLine)
+		privMux.RouteFuncC(mux.Pattern("DELETE", "/conversations/:name/lines/:id"), sayCtrl.DeleteLine)
 	*/
 
 	// TODO: Wrap with error handling and logging
