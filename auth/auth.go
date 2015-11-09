@@ -26,17 +26,21 @@ func New(secret []byte) *Controller {
 }
 
 func (c *Controller) CreateUser(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	user := make([]byte, 0, idLen)
-	if _, err := rand.Read(user); err != nil {
+	id := make([]byte, idLen)
+	if _, err := rand.Read(id); err != nil {
 		panic(err)
 	}
 
-	mac := hmac.New(sha256.New, c.secret).Sum(user)
-	user = append(user, mac...)
+	mac := hmac.New(sha256.New, c.secret)
+	if _, err := mac.Write(id); err != nil {
+		panic(err)
+	}
+
+	msg := mac.Sum(id)
 
 	res := struct {
 		ID string `json:"id"`
-	}{base64.URLEncoding.EncodeToString(user)}
+	}{base64.URLEncoding.EncodeToString(msg)}
 
 	if err := json.NewEncoder(w).Encode(res); err != nil {
 		// TODO: This shouldn't panic but handle some errors
@@ -89,7 +93,12 @@ func (c *Controller) getUser(auth string) string {
 	id := raw[0:idLen]
 	msgMac := raw[idLen:]
 
-	if hmac.Equal(msgMac, mac.Sum(id)) {
+	if _, err := mac.Write(id); err != nil {
+		panic(err)
+	}
+	expectMac := mac.Sum(nil)
+
+	if hmac.Equal(msgMac, expectMac) {
 		return string(id)
 	}
 	return ""

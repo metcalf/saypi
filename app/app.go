@@ -6,6 +6,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/metcalf/saypi/auth"
+	"github.com/metcalf/saypi/dbutil"
 	"github.com/metcalf/saypi/mux"
 )
 
@@ -70,7 +71,41 @@ func New(config *Configuration) (*App, error) {
 	// TODO: Wrap with error handling and logging
 	app.Srv = mainMux
 
-	return nil, nil
+	return &app, nil
+}
+
+// NewForTest creates a new App instance specifically for use in
+// testing. This will modify your passed Configuration to incorporate
+// testing default values. For non-stub configurations, this will
+// initialize a new database and store the DSN in the Configuration.
+func NewForTest(config *Configuration) (*App, error) {
+	var closers []io.Closer
+
+	if config.DBDSN == "" {
+		tdb, db, err := dbutil.NewTestDB()
+		if err != nil {
+			return nil, err
+		}
+		// We don't need the db handle
+		if err := db.Close(); err != nil {
+			return nil, err
+		}
+		closers = append(closers, tdb)
+
+		config.DBDSN = dbutil.DefaultDataSource + " dbname=" + tdb.Name()
+	}
+
+	a, err := New(config)
+	if err != nil {
+		closeAll(closers)
+		return nil, err
+	}
+
+	for _, closer := range closers {
+		a.closers = append(a.closers, closer)
+	}
+
+	return a, nil
 }
 
 func buildDB(dsn string, maxIdle, maxOpen int) (*sqlx.DB, error) {
@@ -80,6 +115,7 @@ func buildDB(dsn string, maxIdle, maxOpen int) (*sqlx.DB, error) {
 	}
 	db.SetMaxIdleConns(maxIdle)
 	db.SetMaxOpenConns(maxOpen)
+	db.MapperFunc(dbutil.MapperFunc())
 	return db, nil
 }
 
