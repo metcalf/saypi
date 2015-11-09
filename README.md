@@ -131,8 +131,4 @@ Permanently deletes a line from the conversation.
 
 # Notes
 * Use 201 created to force generating internal URLs?
-* Structured logging
-  * Event
-  * Description (optional)
-  * key-value pairs
 * Stubbing?
