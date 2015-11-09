@@ -4,12 +4,20 @@ import (
 	"io"
 	"net/http"
 
+	"gopkg.in/throttled/throttled.v2"
+	"gopkg.in/throttled/throttled.v2/store/memstore"
+
 	"github.com/codahale/http-handlers/recovery"
 	"github.com/jmoiron/sqlx"
 	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/dbutil"
 	"github.com/metcalf/saypi/log"
 	"github.com/metcalf/saypi/mux"
+)
+
+const (
+	ipPerMinute = 12
+	ipRateBurst = 10
 )
 
 // Configuration represents the configuration for an App
@@ -43,6 +51,9 @@ func New(config *Configuration) (*App, error) {
 	}
 	app.closers = append(app.closers, db)
 
+	ipQuota := throttled.RateQuota{throttled.PerMin(ipPerMinute), ipRateBurst}
+	ipLimiter, err := buildLimiter(ipQuota)
+
 	authCtrl := auth.New(config.UserSecret)
 
 	mainMux := mux.New()
@@ -75,6 +86,7 @@ func New(config *Configuration) (*App, error) {
 		return recovery.Wrap(h, recovery.LogOnPanic)
 	})
 	mw.AddC(log.WrapC)
+	mw.Add(ipLimiter.RateLimit)
 
 	app.Srv = mw.Wrap(mainMux)
 
@@ -124,6 +136,23 @@ func buildDB(dsn string, maxIdle, maxOpen int) (*sqlx.DB, error) {
 	db.SetMaxOpenConns(maxOpen)
 	db.MapperFunc(dbutil.MapperFunc())
 	return db, nil
+}
+
+func buildLimiter(quota throttled.RateQuota) (*throttled.HTTPRateLimiter, error) {
+	store, err := memstore.New(65536)
+	if err != nil {
+		return nil, err
+	}
+
+	rateLimiter, err := throttled.NewGCRARateLimiter(store, quota)
+	if err != nil {
+		return nil, err
+	}
+
+	return &throttled.HTTPRateLimiter{
+		RateLimiter: rateLimiter,
+		VaryBy:      &throttled.VaryBy{RemoteAddr: true},
+	}, nil
 }
 
 func closeAll(closers []io.Closer) error {
