@@ -133,3 +133,4 @@ Permanently deletes a line from the conversation.
 * Use 201 created to force generating internal URLs?
 * Stubbing?
 * Package descriptions
+* How would a metrics package get the route pattern?
