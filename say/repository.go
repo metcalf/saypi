@@ -113,14 +113,14 @@ type listArgs struct {
 	Limit         int
 }
 
-var builtinMoods = []*mood{
-	{0, "borg", "==", "", false},
+var builtinMoods = []*Mood{
+	{0, "borg", "==", "  ", false},
 	{0, "dead", "xx", "U ", false},
-	{0, "greedy", "$$", "", false},
+	{0, "greedy", "$$", "  ", false},
 	{0, "stoned", "**", "U ", false},
-	{0, "tired", "--", "", false},
-	{0, "wired", "OO", "", false},
-	{0, "young", "..", "", false},
+	{0, "tired", "--", "  ", false},
+	{0, "wired", "OO", "  ", false},
+	{0, "young", "..", "  ", false},
 }
 
 func newRepository(db *sqlx.DB) (*repository, error) {
@@ -163,8 +163,8 @@ func (r *repository) Close() error {
 	return nil
 }
 
-func (r *repository) ListMoods(userID string, args *listArgs) ([]mood, bool, error) {
-	var moods []mood
+func (r *repository) ListMoods(userID string, args *listArgs) ([]Mood, bool, error) {
+	var moods []Mood
 
 	err := r.listMoods.Select(&moods, struct {
 		UserID string
@@ -190,8 +190,8 @@ func (r *repository) ListMoods(userID string, args *listArgs) ([]mood, bool, err
 	return moods, hasMore, nil
 }
 
-func (r *repository) GetMood(userID, name string) (*mood, error) {
-	var m mood
+func (r *repository) GetMood(userID, name string) (*Mood, error) {
+	var m Mood
 
 	for _, builtin := range builtinMoods {
 		if builtin.Name == name {
@@ -212,7 +212,7 @@ func (r *repository) GetMood(userID, name string) (*mood, error) {
 	return &m, nil
 }
 
-func (r *repository) SetMood(userID string, val *mood) error {
+func (r *repository) SetMood(userID string, val *Mood) error {
 	_, err := r.setMood.Exec(struct {
 		UserID, Name, Eyes, Tongue string
 	}{
@@ -235,8 +235,8 @@ func (r *repository) DeleteMood(userID, name string) error {
 	return nil
 }
 
-func (r *repository) ListConversations(userID string, args *listArgs) ([]conversation, bool, error) {
-	var convos []conversation
+func (r *repository) ListConversations(userID string, args *listArgs) ([]Conversation, bool, error) {
+	var convos []Conversation
 
 	err := r.listConvos.Select(convos, struct {
 		UserID string
@@ -254,7 +254,7 @@ func (r *repository) ListConversations(userID string, args *listArgs) ([]convers
 	return convos, hasMore, nil
 }
 
-func (r *repository) NewConversation(userID, heading string) (*conversation, error) {
+func (r *repository) NewConversation(userID, heading string) (*Conversation, error) {
 	var publicID string
 
 	for i := 0; i < maxInsertRetries; i++ {
@@ -268,7 +268,7 @@ func (r *repository) NewConversation(userID, heading string) (*conversation, err
 			PublicID, UserID, Heading string
 		}{publicID, userID, heading})
 		if err == nil {
-			return &conversation{
+			return &Conversation{
 				PublicID: publicID,
 				Heading:  heading,
 			}, nil
@@ -283,8 +283,8 @@ func (r *repository) NewConversation(userID, heading string) (*conversation, err
 	return nil, errors.New("Unable to insert a new, unique conversation")
 }
 
-func (r *repository) GetConversation(userID, convoID string) (*conversation, error) {
-	var convo conversation
+func (r *repository) GetConversation(userID, convoID string) (*Conversation, error) {
+	var convo Conversation
 
 	err := r.getConvo.Get(&convo, struct{ UserID, PublicID string }{userID, convoID})
 	if err == sql.ErrNoRows {
@@ -293,7 +293,7 @@ func (r *repository) GetConversation(userID, convoID string) (*conversation, err
 		return nil, err
 	}
 
-	convo.Lines = make([]line, 0)
+	convo.Lines = make([]Line, 0)
 
 	err = r.findConvoLines.Select(convo.Lines, struct{ ID int }{convo.ID})
 	if err != nil {
@@ -312,10 +312,10 @@ func (r *repository) DeleteConversation(userID, convoID string) error {
 	return nil
 }
 
-func (r *repository) InsertLine(userID, convoID string, l *line) error {
+func (r *repository) InsertLine(userID, convoID string, l *Line) error {
 	var publicID string
 
-	var convo conversation
+	var convo Conversation
 	err := r.getConvo.Get(&convo, struct{ UserID, PublicID string }{userID, convoID})
 	if err != nil {
 		return err
@@ -347,8 +347,8 @@ func (r *repository) InsertLine(userID, convoID string, l *line) error {
 	return errors.New("Unable to insert a new, unique line")
 }
 
-func (r *repository) GetLine(userID, convoID, lineID string) (*line, error) {
-	var l line
+func (r *repository) GetLine(userID, convoID, lineID string) (*Line, error) {
+	var l Line
 
 	err := r.getLine.Get(&l, struct{ UserID, ConvoID, LineID string }{userID, convoID, lineID})
 	if err == sql.ErrNoRows {

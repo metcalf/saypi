@@ -34,7 +34,7 @@ type getAnimalsRes struct {
 	Animals []string `json:"animals"`
 }
 
-type mood struct {
+type Mood struct {
 	ID          int    `json:"-"`
 	Name        string `json:"name"`
 	Eyes        string `json:"eyes"`
@@ -42,21 +42,21 @@ type mood struct {
 	UserDefined bool   `json:"user_defined"`
 }
 
-type line struct {
+type Line struct {
 	PublicID string `json:"id"`
 	Animal   string `json:"animal"`
 	Think    bool   `json:"think"`
 	MoodName string `json:"mood"`
 	Text     string `json:"text"`
 	Output   string `json:"output"`
-	Mood     *mood  `json:"-"`
+	Mood     *Mood  `json:"-"`
 }
 
-type conversation struct {
+type Conversation struct {
 	ID       int    `json:"-"`
 	PublicID string `json:"id"`
 	Heading  string `json:"heading"`
-	Lines    []line `json:"lines,omitempty"`
+	Lines    []Line `json:"lines,omitempty"`
 }
 
 type listRes struct {
@@ -147,16 +147,16 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 	name := mustURLVar(ctx, "mood")
 
 	eyes := r.PostFormValue("eyes")
-	if len(eyes) != 2 {
+	if !(eyes == "" || utf8.RuneCountInString(eyes) == 2) {
 		http.Error(w, "eyes must be a string containing two characters", http.StatusBadRequest)
 	}
 
 	tongue := r.PostFormValue("tongue")
-	if len(tongue) != 2 {
+	if !(tongue == "" || utf8.RuneCountInString(tongue) == 2) {
 		http.Error(w, "tongue must be a string containing two characters", http.StatusBadRequest)
 	}
 
-	m := mood{
+	m := Mood{
 		Name:   name,
 		Eyes:   eyes,
 		Tongue: tongue,
@@ -232,8 +232,8 @@ func (c *Controller) GetConversation(ctx context.Context, w http.ResponseWriter,
 		return
 	}
 
-	for i, line := range convo.Lines {
-		convo.Lines[i].Output, err = c.renderLine(&line)
+	for i, Line := range convo.Lines {
+		convo.Lines[i].Output, err = c.renderLine(&Line)
 		if err != nil {
 			panic(err)
 		}
@@ -290,7 +290,7 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 		return
 	}
 
-	l := line{
+	l := Line{
 		Animal:   animal,
 		Think:    think,
 		MoodName: moodName,
@@ -298,7 +298,7 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 		Mood:     m,
 	}
 
-	// TODO: This will panic if you just pass an invalid mood... bad
+	// TODO: This will panic if you just pass an invalid convo id... bad
 	if err := c.repo.InsertLine(userID, convoID, &l); err != nil {
 		panic(err)
 	}
@@ -345,7 +345,7 @@ func (c *Controller) DeleteLine(ctx context.Context, w http.ResponseWriter, r *h
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (c *Controller) renderLine(l *line) (string, error) {
+func (c *Controller) renderLine(l *Line) (string, error) {
 	cow, ok := c.cows[l.Animal]
 	if !ok {
 		return "", fmt.Errorf("Unknown animal %q", l.Animal)

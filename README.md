@@ -133,7 +133,6 @@ Permanently deletes a line from the conversation.
 # Notes
 * Use 201 created with Location header to force generating internal URLs?
 * Package descriptions
-* How would a metrics package get the route pattern?: let the logger add a pointer that the router can set
 * Concurrency + race detection in mux routing
 * Generate public URLs for a conversation
 * frontend interface, Go as a static fileserver, JS tests running against stub

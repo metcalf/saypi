@@ -112,8 +112,8 @@ func (c *cow) balloonText(text string, think bool, maxWidth int) string {
 	lines := strings.Split(text, "\n")
 
 	maxWidth = 0
-	for _, line := range lines {
-		length := utf8.RuneCountInString(line)
+	for _, Line := range lines {
+		length := utf8.RuneCountInString(Line)
 		if length > maxWidth {
 			maxWidth = length
 		}
@@ -133,16 +133,16 @@ func (c *cow) balloonText(text string, think bool, maxWidth int) string {
 
 	if nbLines > 1 {
 		newText := ""
-		for index, line := range lines {
-			for spaceCount := maxWidth - utf8.RuneCountInString(line); spaceCount > 0; spaceCount-- {
-				line += " "
+		for index, Line := range lines {
+			for spaceCount := maxWidth - utf8.RuneCountInString(Line); spaceCount > 0; spaceCount-- {
+				Line += " "
 			}
 			if index == 0 {
-				newText = fmt.Sprintf("%c %s %c\n", first[0], line, first[1])
+				newText = fmt.Sprintf("%c %s %c\n", first[0], Line, first[1])
 			} else if index == nbLines-1 {
-				newText += fmt.Sprintf("%c %s %c", last[0], line, last[1])
+				newText += fmt.Sprintf("%c %s %c", last[0], Line, last[1])
 			} else {
-				newText += fmt.Sprintf("%c %s %c\n", middle[0], line, middle[1])
+				newText += fmt.Sprintf("%c %s %c\n", middle[0], Line, middle[1])
 			}
 		}
 
