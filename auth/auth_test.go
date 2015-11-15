@@ -14,18 +14,10 @@ import (
 	"github.com/metcalf/saypi/mux"
 )
 
-var secret = []byte("shhh")
+const ()
 
-const (
-	validUser = "DUtRr7IlHC-fd2wH8tfX_iLM8p8-3yeF4MTbc89B1lt41mk17sOlb6sg3JF_z6Sv"
-	// This should be the same length as the validUser so it parses the same way
-	invalidUser = "ABCDr7IlHC-fd2wH8tfX_iLM8p8-3yeF4MTbc89B1lt41mk17sOlb6sg3JF_z6Sv"
-)
-
-func TestFunctionalCreateAndGet(t *testing.T) {
-	cfg := &app.Configuration{
-		UserSecret: secret,
-	}
+func TestAppCreateAndGet(t *testing.T) {
+	cfg := &app.Configuration{}
 
 	a, err := app.NewForTest(cfg)
 	if err != nil {
@@ -52,9 +44,9 @@ func TestFunctionalCreateAndGet(t *testing.T) {
 	}
 
 	testCases := map[string]int{
-		res.ID:      http.StatusNoContent,
-		invalidUser: http.StatusNotFound,
-		"notauser":  http.StatusNotFound,
+		res.ID:               http.StatusNoContent,
+		auth.TestInvalidUser: http.StatusNotFound,
+		"notauser":           http.StatusNotFound,
 	}
 
 	for id, expect := range testCases {
@@ -74,7 +66,10 @@ func TestFunctionalCreateAndGet(t *testing.T) {
 }
 
 func TestWrapC(t *testing.T) {
-	ctrl := auth.New(secret)
+	ctrl, err := auth.New(auth.TestSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var ctx, lastCtx context.Context
 
@@ -87,9 +82,9 @@ func TestWrapC(t *testing.T) {
 	ctx = context.TODO()
 
 	testCases := map[string]int{
-		"":        http.StatusUnauthorized,
-		"invalid": http.StatusUnauthorized,
-		validUser: http.StatusOK,
+		"":                 http.StatusUnauthorized,
+		"invalid":          http.StatusUnauthorized,
+		auth.TestValidUser: http.StatusOK,
 	}
 
 	for user, expect := range testCases {

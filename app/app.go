@@ -13,6 +13,7 @@ import (
 	"github.com/metcalf/saypi/dbutil"
 	"github.com/metcalf/saypi/log"
 	"github.com/metcalf/saypi/mux"
+	"github.com/metcalf/saypi/say"
 )
 
 const (
@@ -54,32 +55,42 @@ func New(config *Configuration) (*App, error) {
 	ipQuota := throttled.RateQuota{throttled.PerMin(ipPerMinute), ipRateBurst}
 	ipLimiter, err := buildLimiter(ipQuota)
 
-	authCtrl := auth.New(config.UserSecret)
+	authCtrl, err := auth.New(config.UserSecret)
+	if err != nil {
+		defer app.Close()
+		return nil, err
+	}
+
+	sayCtrl, err := say.New(db)
+	if err != nil {
+		defer app.Close()
+		return nil, err
+	}
+	app.closers = append(app.closers, sayCtrl)
 
 	mainMux := mux.New()
 	mainMux.RouteFuncC(mux.Pattern("POST", "/users"), authCtrl.CreateUser)
 	mainMux.RouteFuncC(mux.Pattern("GET", "/users/:id"), authCtrl.GetUser)
 
 	privMux := mux.New()
+	// TODO: We don't really want random paths returning a 403 instead of a 404
 	mainMux.NotFoundHandler = authCtrl.WrapC(privMux)
 
-	/*
-		privMux.RouteFuncC(mux.Pattern("GET", "/animals"), sayCtrl.GetAnimals)
+	privMux.RouteFunc(mux.Pattern("GET", "/animals"), sayCtrl.GetAnimals)
 
-		privMux.RouteFuncC(mux.Pattern("GET", "/moods"), sayCtrl.ListMoods)
-		privMux.RouteFuncC(mux.Pattern("PUT", "/moods/:name"), sayCtrl.SetMood)
-		privMux.RouteFuncC(mux.Pattern("GET", "/moods/:name"), sayCtrl.GetMood)
-		privMux.RouteFuncC(mux.Pattern("DELETE", "/moods/:name"), sayCtrl.DeleteMood)
+	privMux.RouteFuncC(mux.Pattern("GET", "/moods"), sayCtrl.ListMoods)
+	privMux.RouteFuncC(mux.Pattern("PUT", "/moods/:mood"), sayCtrl.SetMood)
+	privMux.RouteFuncC(mux.Pattern("GET", "/moods/:mood"), sayCtrl.GetMood)
+	privMux.RouteFuncC(mux.Pattern("DELETE", "/moods/:mood"), sayCtrl.DeleteMood)
 
-		privMux.RouteFuncC(mux.Pattern("GET", "/conversations"), sayCtrl.ListConversations)
-		privMux.RouteFuncC(mux.Pattern("PUT", "/conversations/:name"), sayCtrl.SetConversation)
-		privMux.RouteFuncC(mux.Pattern("GET", "/conversations/:name"), sayCtrl.GetConversation)
-		privMux.RouteFuncC(mux.Pattern("DELETE", "/conversations/:name"), sayCtrl.DeleteConversation)
+	privMux.RouteFuncC(mux.Pattern("GET", "/conversations"), sayCtrl.ListConversations)
+	privMux.RouteFuncC(mux.Pattern("POST", "/conversations"), sayCtrl.CreateConversation)
+	privMux.RouteFuncC(mux.Pattern("GET", "/conversations/:conversation"), sayCtrl.GetConversation)
+	privMux.RouteFuncC(mux.Pattern("DELETE", "/conversations/:conversation"), sayCtrl.DeleteConversation)
 
-		privMux.RouteFuncC(mux.Pattern("POST", "/conversations/:name/lines"), sayCtrl.CreateLine)
-		privMux.RouteFuncC(mux.Pattern("GET", "/conversations/:name/lines/:id"), sayCtrl.GetLine)
-		privMux.RouteFuncC(mux.Pattern("DELETE", "/conversations/:name/lines/:id"), sayCtrl.DeleteLine)
-	*/
+	privMux.RouteFuncC(mux.Pattern("POST", "/conversations/:conversation/lines"), sayCtrl.CreateLine)
+	privMux.RouteFuncC(mux.Pattern("GET", "/conversations/:conversation/lines/:line"), sayCtrl.GetLine)
+	privMux.RouteFuncC(mux.Pattern("DELETE", "/conversations/:name/lines/:line"), sayCtrl.DeleteLine)
 
 	mw := mux.NewMiddleware()
 	mw.Add(func(h http.Handler) http.Handler {
@@ -99,6 +110,10 @@ func New(config *Configuration) (*App, error) {
 // initialize a new database and store the DSN in the Configuration.
 func NewForTest(config *Configuration) (*App, error) {
 	var closers []io.Closer
+
+	if len(config.UserSecret) == 0 {
+		config.UserSecret = auth.TestSecret
+	}
 
 	if config.DBDSN == "" {
 		tdb, db, err := dbutil.NewTestDB()

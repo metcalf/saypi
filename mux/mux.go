@@ -9,19 +9,52 @@ import (
 )
 
 const (
-	urlVarKey = "mux.Vars"
+	matchKey = "mux.Match"
 )
 
-// VarFromContext returns the URL path variable corresponding to key from the
-// request context.
-func VarFromContext(ctx context.Context, key string) ([]string, bool) {
-	vars, ok := ctx.Value(urlVarKey).(url.Values)
+// ContextWithMatch merges the provided Match into the context,
+// preserving references for MatchContext.
+func ContextWithMatch(ctx context.Context, m Match) context.Context {
+	val, ok := ctx.Value(matchKey).(*match)
 	if !ok {
-		return nil, false
+		val = &match{vars: make(url.Values)}
+		ctx = context.WithValue(ctx, matchKey, val)
 	}
 
-	vals, ok := vars[key]
-	return vals, ok
+	val.pattern = m.Pattern()
+	val.matched = m.Matched()
+
+	for k, vs := range m.Vars() {
+		for _, v := range vs {
+			val.vars.Add(k, v)
+		}
+	}
+
+	return ctx
+}
+
+// MatchContext returns a Context and associated Match. If a match
+// is already present in the context, it returns the same context and
+// extracted match. If no match is present, a new Context and Match are
+// returned. If a route matches later in the request, the Match will
+// reflect that match.
+func MatchContext(ctx context.Context) (context.Context, Match) {
+	val, ok := ctx.Value(matchKey).(*match)
+	if ok {
+		return ctx, val
+	}
+
+	m := match{vars: make(url.Values)}
+	return context.WithValue(ctx, matchKey, &m), &m
+}
+
+// FromContext returns the Match in the context, if any.
+func FromContext(ctx context.Context) Match {
+	val, ok := ctx.Value(matchKey).(*match)
+	if !ok {
+		return nil
+	}
+	return val
 }
 
 // HandlerC is an analog of http.Handler with a context parameter
@@ -57,7 +90,7 @@ func (f HandlerFuncC) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Mux registers routes to be matched and dispatched
 type Mux struct {
-	routes []*route
+	routes []route
 	// Configurable handler to be used when no route matches
 	NotFoundHandler HandlerC
 }
@@ -73,22 +106,22 @@ func New() *Mux {
 
 // RouteC adds a new route to a HandlerC
 func (m *Mux) RouteC(matcher Matcher, handler HandlerC) {
-	m.routes = append(m.routes, &route{matcher, handler})
+	m.routes = append(m.routes, route{matcher, handler})
 }
 
 // RouteFuncC adds a new route to a HandlerFuncC
 func (m *Mux) RouteFuncC(matcher Matcher, handler HandlerFuncC) {
-	m.routes = append(m.routes, &route{matcher, handler})
+	m.routes = append(m.routes, route{matcher, handler})
 }
 
 // Route adds a new route to an http.Handler, losing the request context.
 func (m *Mux) Route(matcher Matcher, handler http.Handler) {
-	m.routes = append(m.routes, &route{matcher, handlerWithC{handler}})
+	m.routes = append(m.routes, route{matcher, handlerWithC{handler}})
 }
 
 // RouteFunc adds a new route to an http.HandlerFunc, losing the request context.
 func (m *Mux) RouteFunc(matcher Matcher, handler http.HandlerFunc) {
-	m.routes = append(m.routes, &route{matcher, handlerWithC{handler}})
+	m.routes = append(m.routes, route{matcher, handlerWithC{handler}})
 }
 
 // ServeHTTPC dispatches the request to the handler in the matched
@@ -119,6 +152,26 @@ type Matcher interface {
 	Match(context.Context, *http.Request) (context.Context, bool)
 }
 
+type match struct {
+	pattern string
+	vars    url.Values
+	matched bool
+}
+
+func (m *match) Pattern() string  { return m.pattern }
+func (m *match) Vars() url.Values { return m.vars }
+func (m *match) Matched() bool    { return m.matched }
+
+// Match is an interface to the route match for a request
+type Match interface {
+	// Pattern returns a string pattern that represents the matched route.
+	Pattern() string
+	// Vars returns any variables set by the matched route.
+	Vars() url.Values
+	// Matched returns true if a route match has been found.
+	Matched() bool
+}
+
 type route struct {
 	Matcher
 	HandlerC
@@ -144,9 +197,10 @@ func (p *pathPattern) Match(ctx context.Context, r *http.Request) (context.Conte
 
 	path := r.URL.Path
 
-	params, ok := ctx.Value(urlVarKey).(url.Values)
-	if !ok {
-		params = make(url.Values)
+	m := match{
+		pattern: p.path,
+		matched: true,
+		vars:    make(url.Values),
 	}
 
 	var i, j int
@@ -154,15 +208,15 @@ func (p *pathPattern) Match(ctx context.Context, r *http.Request) (context.Conte
 		switch {
 		case j >= len(p.path):
 			if p.path != "/" && len(p.path) > 0 && p.path[len(p.path)-1] == '/' {
-				return context.WithValue(ctx, urlVarKey, params), true
+				return ContextWithMatch(ctx, &m), true
 			}
 			return nil, false
 		case p.path[j] == ':':
 			var name, val string
 			var nextc byte
-			name, nextc, j = match(p.path, isAlnum, j+1)
-			val, _, i = match(path, matchPart(nextc), i)
-			params.Add(name, val)
+			name, nextc, j = matchPath(p.path, isAlnum, j+1)
+			val, _, i = matchPath(path, matchPart(nextc), i)
+			m.vars.Add(name, val)
 		case path[i] == p.path[j]:
 			i++
 			j++
@@ -173,7 +227,7 @@ func (p *pathPattern) Match(ctx context.Context, r *http.Request) (context.Conte
 	if j != len(p.path) {
 		return nil, false
 	}
-	return context.WithValue(ctx, urlVarKey, params), true
+	return ContextWithMatch(ctx, &m), true
 }
 
 func matchPart(b byte) func(byte) bool {
@@ -182,7 +236,7 @@ func matchPart(b byte) func(byte) bool {
 	}
 }
 
-func match(s string, f func(byte) bool, i int) (matched string, next byte, j int) {
+func matchPath(s string, f func(byte) bool, i int) (matched string, next byte, j int) {
 	j = i
 	for j < len(s) && f(s[j]) {
 		j++

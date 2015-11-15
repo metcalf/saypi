@@ -13,5 +13,4 @@ clean:
 	rm $(COW_BUILD)
 
 $(COW_BUILD): $(COW_FILES)
-	go-bindata -o $@ -nomemcopy -prefix $(COW_PATH) $(COW_PATH)
-	sed -i'' 's/package main/package cows/' $@
+	go-bindata -o="$@" -ignore="$@" -pkg="cows" -nomemcopy -nometadata -prefix="$(COW_PATH)" "$(COW_PATH)"

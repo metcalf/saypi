@@ -53,16 +53,19 @@ func TestPatternMatch(t *testing.T) {
 			continue
 		}
 		if c.vars != nil && len(c.vars) > 0 {
-			vars, ok := ctx.Value(urlVarKey).(url.Values)
-			if !ok {
-				t.Errorf("%d: Expected context to contain URL vars", i)
-			} else if !reflect.DeepEqual(vars, c.vars) {
+			m := FromContext(ctx)
+			if m == nil {
+				t.Errorf("%d: Expected context to contain a match", i)
+			} else if !m.Matched() {
+				t.Errorf("%d: Expected context to contain a successful match", i)
+			} else if vars := m.Vars(); !reflect.DeepEqual(vars, c.vars) {
 				t.Errorf("%d: Expected URL vars %v but got %v", i, c.vars, vars)
 			}
 		}
 	}
 
-	ctx := context.WithValue(context.Background(), urlVarKey, url.Values{"foo": {"bar"}})
+	beforeCtx, ctxMatch := MatchContext(context.Background())
+	ctx := ContextWithMatch(beforeCtx, &match{vars: url.Values{"foo": {"bar"}}})
 	req, err := http.NewRequest("GET", "/baz", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -74,19 +77,25 @@ func TestPatternMatch(t *testing.T) {
 		t.Error("Did not expect pattern to match")
 	}
 
-	// Test appending to an existing URL variable
+	// Test appending to an existing URL variable and getting a reference
+	// to the match before matching.
 	ctx, ok = Pattern("GET", "/:foo").Match(ctx, req)
 	if !ok {
 		t.Fatal("Expected pattern to match")
 	}
 
-	vars, ok := VarFromContext(ctx, "foo")
-	if !ok {
-		t.Error("Expected context to contain URL variable 'foo'")
-	} else if want := []string{"bar", "baz"}; !reflect.DeepEqual(vars, want) {
-		t.Errorf("Expected URL variable to be %v but got %v", want, vars)
+	if m := FromContext(ctx); m == nil {
+		t.Error("Expected context to contain match")
+	} else if have, want := m.Vars()["foo"], []string{"bar", "baz"}; !reflect.DeepEqual(have, want) {
+		t.Errorf("Expected URL variable to be %v but got %v", want, have)
 	}
 
+	if !ctxMatch.Matched() {
+		t.Error("Expected match ref to have been set to matched")
+	}
+	if have, want := ctxMatch.Pattern(), "/:foo"; have != want {
+		t.Errorf("Expected match ref to have pattern %q but got %q", want, have)
+	}
 }
 
 func TestMux(t *testing.T) {

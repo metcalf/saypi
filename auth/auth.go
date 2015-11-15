@@ -18,13 +18,21 @@ type Controller struct {
 	secret []byte
 }
 
+// TODO: I don't really want these values polluting the pulic interface.
+var TestSecret = []byte("shhh")
+
 const (
 	idLen  = 16
 	ctxKey = "auth.User"
+
+	// TODO: I don't really want these values polluting the pulic interface.
+	TestValidUser = "DUtRr7IlHC-fd2wH8tfX_iLM8p8-3yeF4MTbc89B1lt41mk17sOlb6sg3JF_z6Sv"
+	// This should be the same length as the validUser so it parses the same way
+	TestInvalidUser = "ABCDr7IlHC-fd2wH8tfX_iLM8p8-3yeF4MTbc89B1lt41mk17sOlb6sg3JF_z6Sv"
 )
 
-func New(secret []byte) *Controller {
-	return &Controller{secret}
+func New(secret []byte) (*Controller, error) {
+	return &Controller{secret}, nil
 }
 
 func (c *Controller) CreateUser(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -51,12 +59,13 @@ func (c *Controller) CreateUser(ctx context.Context, w http.ResponseWriter, r *h
 }
 
 func (c *Controller) GetUser(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	auth, ok := mux.VarFromContext(ctx, "id")
-	if !ok {
+	match := mux.FromContext(ctx)
+	if match == nil {
 		panic("GetUser called without an `id` URL Var")
 	}
+	auth := match.Vars().Get("id")
 
-	if c.getUser(auth[0]) != nil {
+	if c.getUser(auth) != nil {
 		w.WriteHeader(204)
 	} else {
 		http.NotFound(w, r)
@@ -118,7 +127,7 @@ func (c *Controller) getUser(auth string) *User {
 	expectMac := mac.Sum(nil)
 
 	if hmac.Equal(msgMac, expectMac) {
-		return &User{string(id)}
+		return &User{base64.URLEncoding.EncodeToString(id)}
 	}
 	return nil
 }

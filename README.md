@@ -64,7 +64,7 @@ Retrieve an existing mood.
 
 ### DELETE /moods/:name
 
-Permanently delete a mood that you created.
+Permanently delete a mood that you created. Returns a 204 with no content.
 
 ### GET /conversations
 
@@ -72,7 +72,7 @@ Returns a list of your conversations.
 
 *Success Response*: A list response of `conversation`s without their `line`s.
 
-### PUT /conversations/:name
+### POST /conversations
 
 Creates a new conversation with the specified name for your user account.
 
@@ -80,7 +80,7 @@ Creates a new conversation with the specified name for your user account.
 
 *Success Response*: A `conversation`
 
-### GET /conversations/:name
+### GET /conversations/:id
 
 Retrieves an existing conversation. 
 
@@ -111,26 +111,29 @@ Permanently deletes a line from the conversation.
 ## API objects
 
 ### conversation
-* `name`[string]
-* `public_url`[string]: URL where the conversation may be accessed in text form without authentication.
-* `animals`[array[string]]
+* `id`[string]
+* `heading`[string]
 * `lines`[array[line]]
 
 ### line
 
 * `id`[string]
 * `animal`[string]
+* `think` [bool]
 * `mood`[string]
-* `text`[string]: Rendered text of the line.
+* `text`[string]
+* `output`[string]: Rendered text of the line.
 
 ### mood
 * `name`[string]: A unique string name for the mood
-* `user_created`[bool]: Indicates that the mood was created by the user, not built-in.
+* `user_defined`[bool]: Indicates that the mood was created by the user, not built-in.
 * `eyes`[string]: A two character string for the animal's eyes.
 * `tongue`[string]: A two character string representing the animal's tongue.
 
 # Notes
-* Use 201 created to force generating internal URLs?
-* Stubbing?
+* Use 201 created with Location header to force generating internal URLs?
 * Package descriptions
-* How would a metrics package get the route pattern?
+* How would a metrics package get the route pattern?: let the logger add a pointer that the router can set
+* Concurrency + race detection in mux routing
+* Generate public URLs for a conversation
+* frontend interface, Go as a static fileserver, JS tests running against stub
