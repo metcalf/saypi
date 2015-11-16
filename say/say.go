@@ -35,28 +35,31 @@ type getAnimalsRes struct {
 }
 
 type Mood struct {
-	ID          int    `json:"-"`
 	Name        string `json:"name"`
 	Eyes        string `json:"eyes"`
 	Tongue      string `json:"tongue"`
 	UserDefined bool   `json:"user_defined"`
+
+	id int
 }
 
 type Line struct {
-	PublicID string `json:"id"`
+	ID       string `json:"id"`
 	Animal   string `json:"animal"`
 	Think    bool   `json:"think"`
 	MoodName string `json:"mood"`
 	Text     string `json:"text"`
 	Output   string `json:"output"`
-	Mood     *Mood  `json:"-"`
+
+	mood *Mood
 }
 
 type Conversation struct {
-	ID       int    `json:"-"`
-	PublicID string `json:"id"`
-	Heading  string `json:"heading"`
-	Lines    []Line `json:"lines,omitempty"`
+	ID      string `json:"id"`
+	Heading string `json:"heading"`
+	Lines   []Line `json:"lines,omitempty"`
+
+	id int
 }
 
 type listRes struct {
@@ -156,18 +159,19 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 		http.Error(w, "tongue must be a string containing two characters", http.StatusBadRequest)
 	}
 
-	m := Mood{
-		Name:   name,
-		Eyes:   eyes,
-		Tongue: tongue,
+	mood := Mood{
+		Name:        name,
+		Eyes:        eyes,
+		Tongue:      tongue,
+		UserDefined: true,
 	}
 
-	err := c.repo.SetMood(userID, &m)
+	err := c.repo.SetMood(userID, &mood)
 	if err != nil {
 		panic(err)
 	}
 
-	respond(w, m)
+	respond(w, mood)
 }
 
 func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -270,6 +274,9 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 	}
 
 	animal := r.PostFormValue("animal")
+	if animal == "" {
+		animal = "default"
+	}
 	if _, ok := c.cows[animal]; !ok {
 		msg := fmt.Sprintf("Invalid animal name %s", animal)
 		http.Error(w, msg, http.StatusBadRequest)
@@ -280,35 +287,39 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 	moodName := strings.Replace(r.PostFormValue("mood"), "\x00", "", -1)
 	text := strings.Replace(r.PostFormValue("text"), "\x00", "", -1)
 
-	m, err := c.repo.GetMood(userID, moodName)
+	if moodName == "" {
+		moodName = "default"
+	}
+
+	mood, err := c.repo.GetMood(userID, moodName)
 	if err != nil {
 		panic(err)
 	}
-	if m == nil {
+	if mood == nil {
 		msg := fmt.Sprintf("Invalid mood name %s", moodName)
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
 
-	l := Line{
+	line := Line{
 		Animal:   animal,
 		Think:    think,
 		MoodName: moodName,
 		Text:     text,
-		Mood:     m,
+		mood:     mood,
 	}
 
 	// TODO: This will panic if you just pass an invalid convo id... bad
-	if err := c.repo.InsertLine(userID, convoID, &l); err != nil {
+	if err := c.repo.InsertLine(userID, convoID, &line); err != nil {
 		panic(err)
 	}
 
-	l.Output, err = c.renderLine(&l)
+	line.Output, err = c.renderLine(&line)
 	if err != nil {
 		panic(err)
 	}
 
-	respond(w, l)
+	respond(w, line)
 }
 
 func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -316,21 +327,21 @@ func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http
 	convoID := mustURLVar(ctx, "conversation")
 	lineID := mustURLVar(ctx, "line")
 
-	l, err := c.repo.GetLine(userID, convoID, lineID)
+	line, err := c.repo.GetLine(userID, convoID, lineID)
 	if err != nil {
 		panic(err)
 	}
-	if l == nil {
+	if line == nil {
 		http.NotFound(w, r)
 		return
 	}
 
-	l.Output, err = c.renderLine(l)
+	line.Output, err = c.renderLine(line)
 	if err != nil {
 		panic(err)
 	}
 
-	respond(w, l)
+	respond(w, line)
 }
 
 func (c *Controller) DeleteLine(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -345,13 +356,13 @@ func (c *Controller) DeleteLine(ctx context.Context, w http.ResponseWriter, r *h
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (c *Controller) renderLine(l *Line) (string, error) {
-	cow, ok := c.cows[l.Animal]
+func (c *Controller) renderLine(line *Line) (string, error) {
+	cow, ok := c.cows[line.Animal]
 	if !ok {
-		return "", fmt.Errorf("Unknown animal %q", l.Animal)
+		return "", fmt.Errorf("Unknown animal %q", line.Animal)
 	}
 
-	return cow.Say(l.Text, l.Mood.Eyes, l.Mood.Tongue, l.Think)
+	return cow.Say(line.Text, line.mood.Eyes, line.mood.Tongue, line.Think)
 }
 
 func mustUserID(ctx context.Context) string {
@@ -387,8 +398,8 @@ func mustMatchVars(ctx context.Context) url.Values {
 
 func getListArgs(r *http.Request) (*listArgs, error) {
 	res := listArgs{
-		After:  r.FormValue("after"),
-		Before: r.FormValue("before"),
+		After:  r.FormValue("starting_after"),
+		Before: r.FormValue("ending_before"),
 	}
 
 	var err error

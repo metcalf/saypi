@@ -16,16 +16,14 @@ import (
 	"github.com/metcalf/saypi/say"
 )
 
-const (
-	ipPerMinute = 12
-	ipRateBurst = 10
-)
-
 // Configuration represents the configuration for an App
 type Configuration struct {
 	DBDSN     string // postgres data source name
 	DBMaxIdle int    // maximum number of idle DB connections
 	DBMaxOpen int    // maximum number of open DB connections
+
+	IPPerMinute int // maximum number of requests per IP per minute
+	IPRateBurst int // maximum burst of requests from an IP
 
 	UserSecret []byte // secret for generating secure user tokens
 }
@@ -52,7 +50,7 @@ func New(config *Configuration) (*App, error) {
 	}
 	app.closers = append(app.closers, db)
 
-	ipQuota := throttled.RateQuota{throttled.PerMin(ipPerMinute), ipRateBurst}
+	ipQuota := throttled.RateQuota{throttled.PerMin(config.IPPerMinute), config.IPRateBurst}
 	ipLimiter, err := buildLimiter(ipQuota)
 
 	authCtrl, err := auth.New(config.UserSecret)
@@ -73,7 +71,7 @@ func New(config *Configuration) (*App, error) {
 	mainMux.RouteFuncC(mux.Pattern("GET", "/users/:id"), authCtrl.GetUser)
 
 	privMux := mux.New()
-	// TODO: We don't really want random paths returning a 403 instead of a 404
+	// TODO: We don't really want random paths returning a 403 instead of a
 	mainMux.NotFoundHandler = authCtrl.WrapC(privMux)
 
 	privMux.RouteFunc(mux.Pattern("GET", "/animals"), sayCtrl.GetAnimals)
@@ -90,7 +88,7 @@ func New(config *Configuration) (*App, error) {
 
 	privMux.RouteFuncC(mux.Pattern("POST", "/conversations/:conversation/lines"), sayCtrl.CreateLine)
 	privMux.RouteFuncC(mux.Pattern("GET", "/conversations/:conversation/lines/:line"), sayCtrl.GetLine)
-	privMux.RouteFuncC(mux.Pattern("DELETE", "/conversations/:name/lines/:line"), sayCtrl.DeleteLine)
+	privMux.RouteFuncC(mux.Pattern("DELETE", "/conversations/:conversation/lines/:line"), sayCtrl.DeleteLine)
 
 	mw := mux.NewMiddleware()
 	mw.Add(func(h http.Handler) http.Handler {
@@ -113,6 +111,12 @@ func NewForTest(config *Configuration) (*App, error) {
 
 	if len(config.UserSecret) == 0 {
 		config.UserSecret = auth.TestSecret
+	}
+	if config.IPPerMinute == 0 {
+		config.IPPerMinute = 100000
+	}
+	if config.IPRateBurst == 0 {
+		config.IPRateBurst = 100000
 	}
 
 	if config.DBDSN == "" {

@@ -64,7 +64,6 @@ func (c *cow) Say(text, eyes, tongue string, think bool) (string, error) {
 }
 
 // Adapted from https://github.com/marmelab/gosay
-// TODO:
 func (c *cow) cowText(eyes, tongue string, think bool) string {
 	var thoughts string
 	if think {

@@ -7,8 +7,6 @@ import (
 	"os"
 )
 
-// TODO: Report metrics from logging
-
 var logger Logger
 
 func init() {
@@ -46,8 +44,9 @@ func (l *Logger) Print(event, msg string, data map[string]interface{}) {
 		for key, value := range data {
 			if !first {
 				buf.WriteRune(' ')
-				first = false
 			}
+			first = false
+
 			_, err := buf.WriteString(fmt.Sprintf("%s=%q", key, value))
 			if err != nil {
 				panic(err)

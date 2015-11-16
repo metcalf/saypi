@@ -54,7 +54,7 @@ func (l *Logger) WrapC(h mux.HandlerC) mux.HandlerC {
 		end := time.Now()
 
 		remoteAddr, _, _ := net.SplitHostPort(r.RemoteAddr)
-		reqTime := float64(end.Sub(start).Nanoseconds()) / float64(time.Millisecond)
+		reqTime := float64(end.Sub(start).Nanoseconds()) / float64(time.Second)
 
 		data := map[string]interface{}{
 			"time":            start.In(time.UTC).Format(httpDateFormat),
@@ -64,7 +64,7 @@ func (l *Logger) WrapC(h mux.HandlerC) mux.HandlerC {
 			"http_status":     strconv.Itoa(w2.Status()),
 			"bytes_written":   strconv.Itoa(w2.BytesWritten()),
 			"http_user_agent": r.UserAgent(),
-			"request_time":    strconv.FormatFloat(reqTime, 'f', 3, 64),
+			"request_time":    strconv.FormatFloat(reqTime, 'f', 6, 64),
 		}
 
 		for k, v := range extra {

@@ -14,8 +14,6 @@ import (
 	"github.com/metcalf/saypi/mux"
 )
 
-const ()
-
 func TestAppCreateAndGet(t *testing.T) {
 	cfg := &app.Configuration{}
 
@@ -23,6 +21,7 @@ func TestAppCreateAndGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer a.Close()
 
 	req, err := http.NewRequest("POST", "/users", nil)
 	if err != nil {

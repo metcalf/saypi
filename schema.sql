@@ -32,7 +32,8 @@ CREATE TABLE lines (
        animal TEXT NOT NULL,
        text TEXT NOT NULL,
        think BOOLEAN NOT NULL,
-       mood_id INTEGER NOT NULL,
+       mood_name TEXT NOT NULL,
+       mood_id INTEGER, -- can be null if using a built-in mood
        conversation_id INTEGER NOT NULL,
 
        UNIQUE(public_id),

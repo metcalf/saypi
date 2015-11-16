@@ -66,6 +66,9 @@ func readConfiguration() (*app.Configuration, *config, error) {
 	fl.IntVar(&appCfg.DBMaxIdle, "db_max_idle", 2, "maximum number of idle DB connections")
 	fl.IntVar(&appCfg.DBMaxOpen, "db_max_open", 100, "maximum number of open DB connections")
 
+	fl.IntVar(&appCfg.IPPerMinute, "per_ip_rpm", 12, "maximum number of requests per IP per minute")
+	fl.IntVar(&appCfg.IPRateBurst, "per_ip_burst", 5, "maximum instantaneous burst of requests per IP")
+
 	userSecretStr := flag.String("user_secret", "", "hex encoded secret for generating secure user tokens")
 
 	if err := fl.Parse(os.Args[1:]); err != nil {

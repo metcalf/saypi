@@ -4,10 +4,12 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -20,15 +22,16 @@ const (
 	dbErrDupUnique   = "23505"
 
 	listMoods = `
-SELECT id, name, eyes, tongue
+SELECT id as int_id, name, eyes, tongue
 FROM moods
 WHERE user_id = :user_id AND
-  (:after = '' OR lower(name) > lower(:after)) AND
+  lower(name) > lower(:after) AND
   (:before = '' OR lower(name) < lower(:before))
+ORDER BY lower(name) ASC
 LIMIT :limit + 1
 `
 	findMood = `
-SELECT id, eyes, tongue
+SELECT id as int_id, eyes, tongue, name
 FROM moods
 WHERE user_id = :user_id AND lower(name) = lower(:name)
 `
@@ -38,30 +41,37 @@ WHERE user_id = :user_id AND lower(name) = lower(:name)
 `
 	// TODO: Racy upsert
 	setMood = `
-WITH updated as (
+WITH
+updated as (
   UPDATE moods SET eyes = :eyes, tongue = :tongue
   WHERE user_id = :user_id AND lower(name) = lower(:name)
-  RETURNING 1
+  RETURNING id
+),
+inserted as (
+  INSERT INTO moods (user_id, name, eyes, tongue)
+  SELECT :user_id, lower(:name), :eyes, :tongue
+  WHERE NOT EXISTS (SELECT * FROM updated)
+  RETURNING id
 )
-INSERT INTO moods (user_id, name, eyes, tongue)
-SELECT :user_id, :name, :eyes, :tongue
-WHERE NOT EXISTS (SELECT * FROM updated)
+SELECT id FROM updated UNION ALL SELECT id FROM inserted
 `
 
 	listConvos = `
-SELECT public_id, heading
+SELECT id as int_id, public_id as id, heading
 FROM conversations
 WHERE user_id = :user_id AND
-  (:after = '' OR public_id > :after) AND
+  public_id > :after AND
   (:before = '' OR public_id < :before)
+ORDER BY id ASC
 LIMIT :limit + 1
 `
 	insertConvo = `
 INSERT INTO conversations (public_id, user_id, heading)
 SELECT :public_id, :user_id, :heading
+RETURNING id
 `
 	getConvo = `
-SELECT id, heading FROM conversations
+SELECT id as int_id, public_id as id, heading FROM conversations
 WHERE user_id = :user_id AND public_id = :public_id
 `
 	deleteConvo = `
@@ -69,19 +79,20 @@ DELETE FROM conversations WHERE user_id = :user_id AND public_id = :public_id
 `
 
 	findConvoLines = `
-SELECT animal, think, text, name as mood_name, eyes, tongue
+SELECT public_id as id, animal, think, text, mood_name, eyes, tongue
 FROM lines
-INNER JOIN moods ON lines.mood_id = moods.id
+LEFT JOIN moods ON lines.mood_id = moods.id
 WHERE conversation_id = :id
+ORDER BY lines.id ASC
 `
 	insertLine = `
-INSERT INTO LINES (public_id, animal, think, text, mood_id, conversation_id)
-SELECT :public_id, :animal, :think, :text, :mood_id, :conversation_id
+INSERT INTO LINES (public_id, animal, think, text, mood_name, mood_id, conversation_id)
+SELECT :public_id, :animal, :think, :text, :mood_name, :mood_id, :conversation_id
 `
 	getLine = `
-SELECT animal, think, text, name as mood_name, eyes, tongue
+SELECT lines.public_id as id, animal, think, text, mood_name, eyes, tongue
 FROM lines
-INNER JOIN moods ON lines.mood_id = moods.id
+LEFT JOIN moods ON lines.mood_id = moods.id
 INNER JOIN conversations ON lines.conversation_id = conversations.id
 WHERE
   conversations.public_id = :convo_id AND
@@ -114,13 +125,30 @@ type listArgs struct {
 }
 
 var builtinMoods = []*Mood{
-	{0, "borg", "==", "  ", false},
-	{0, "dead", "xx", "U ", false},
-	{0, "greedy", "$$", "  ", false},
-	{0, "stoned", "**", "U ", false},
-	{0, "tired", "--", "  ", false},
-	{0, "wired", "OO", "  ", false},
-	{0, "young", "..", "  ", false},
+	{"default", "oo", "  ", false, 0},
+	{"borg", "==", "  ", false, 0},
+	{"dead", "xx", "U ", false, 0},
+	{"greedy", "$$", "  ", false, 0},
+	{"stoned", "**", "U ", false, 0},
+	{"tired", "--", "  ", false, 0},
+	{"wired", "OO", "  ", false, 0},
+	{"young", "..", "  ", false, 0},
+}
+
+type moodRec struct {
+	IntID int
+	Mood
+}
+
+type lineRec struct {
+	Eyes, Tongue sql.NullString
+	Line
+}
+
+type convoRec struct {
+	IntID int
+
+	Conversation
 }
 
 func newRepository(db *sqlx.DB) (*repository, error) {
@@ -163,19 +191,28 @@ func (r *repository) Close() error {
 	return nil
 }
 
+// TODO: Handle cases with builtin moods before/after
 func (r *repository) ListMoods(userID string, args *listArgs) ([]Mood, bool, error) {
 	var moods []Mood
 
-	err := r.listMoods.Select(&moods, struct {
+	rows, err := r.listMoods.Queryx(struct {
 		UserID string
 		*listArgs
 	}{userID, args})
 	if err != nil {
 		return nil, false, err
 	}
+	defer rows.Close()
 
-	for _, m := range moods {
-		m.UserDefined = true
+	for rows.Next() {
+		var rec moodRec
+		if err := rows.StructScan(&rec); err != nil {
+			return nil, false, err
+		}
+
+		rec.UserDefined = true
+		rec.id = rec.IntID
+		moods = append(moods, rec.Mood)
 	}
 
 	hasMore := len(moods) > args.Limit
@@ -183,50 +220,64 @@ func (r *repository) ListMoods(userID string, args *listArgs) ([]Mood, bool, err
 		moods = moods[:args.Limit]
 	}
 
-	for _, m := range builtinMoods {
-		moods = append(moods, *m)
+	for _, mood := range builtinMoods {
+		moods = append(moods, *mood)
 	}
 
 	return moods, hasMore, nil
 }
 
 func (r *repository) GetMood(userID, name string) (*Mood, error) {
-	var m Mood
-
 	for _, builtin := range builtinMoods {
 		if builtin.Name == name {
 			// Copy to prevent modifying builtins by the caller
-			m = *builtin
-			return &m, nil
+			mood := *builtin
+			return &mood, nil
 		}
 	}
 
-	err := r.findMood.Get(&m, struct{ UserID, Name string }{userID, name})
+	var rec moodRec
+	err := r.findMood.Get(&rec, struct{ UserID, Name string }{userID, name})
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}
-	m.UserDefined = true
+	rec.UserDefined = true
+	rec.id = rec.IntID
 
-	return &m, nil
+	return &rec.Mood, nil
 }
 
-func (r *repository) SetMood(userID string, val *Mood) error {
-	_, err := r.setMood.Exec(struct {
+func (r *repository) SetMood(userID string, mood *Mood) error {
+	if isBuiltin(mood.Name) {
+		return errors.New("Cannot update built-in moods")
+	}
+
+	var id int
+	err := r.setMood.QueryRow(struct {
 		UserID, Name, Eyes, Tongue string
 	}{
-		userID, val.Name, val.Eyes, val.Tongue,
-	})
+		userID, mood.Name, mood.Eyes, mood.Tongue,
+	}).Scan(&id)
 	if err != nil {
 		return err
 	}
+	if id == 0 {
+		return fmt.Errorf("Unable to update mood %q", mood.Name)
+	}
+
+	mood.id = id
 
 	return nil
 }
 
 func (r *repository) DeleteMood(userID, name string) error {
-	// TODO: error trying to delete a mood with associated lines
+	if isBuiltin(name) {
+		return errors.New("Cannot delete built-in moods")
+	}
+
+	// TODO: test handling error trying to delete a mood with associated lines
 	_, err := r.deleteMood.Exec(struct{ UserID, Name string }{userID, name})
 	if err != nil {
 		return err
@@ -238,12 +289,23 @@ func (r *repository) DeleteMood(userID, name string) error {
 func (r *repository) ListConversations(userID string, args *listArgs) ([]Conversation, bool, error) {
 	var convos []Conversation
 
-	err := r.listConvos.Select(convos, struct {
+	rows, err := r.listConvos.Queryx(struct {
 		UserID string
 		*listArgs
 	}{userID, args})
 	if err != nil {
 		return nil, false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var rec convoRec
+		if err := rows.StructScan(&rec); err != nil {
+			return nil, false, err
+		}
+
+		rec.id = rec.IntID
+		convos = append(convos, rec.Conversation)
 	}
 
 	hasMore := len(convos) > args.Limit
@@ -264,13 +326,15 @@ func (r *repository) NewConversation(userID, heading string) (*Conversation, err
 		}
 		publicID = convoIDPrefix + strconv.FormatUint(rv.Uint64(), 36)
 
-		_, err = r.insertConvo.Exec(struct {
+		var id int
+		err = r.insertConvo.QueryRow(struct {
 			PublicID, UserID, Heading string
-		}{publicID, userID, heading})
+		}{publicID, userID, heading}).Scan(&id)
 		if err == nil {
 			return &Conversation{
-				PublicID: publicID,
-				Heading:  heading,
+				ID:      publicID,
+				Heading: heading,
+				id:      id,
 			}, nil
 		}
 
@@ -284,7 +348,7 @@ func (r *repository) NewConversation(userID, heading string) (*Conversation, err
 }
 
 func (r *repository) GetConversation(userID, convoID string) (*Conversation, error) {
-	var convo Conversation
+	var convo convoRec
 
 	err := r.getConvo.Get(&convo, struct{ UserID, PublicID string }{userID, convoID})
 	if err == sql.ErrNoRows {
@@ -293,14 +357,28 @@ func (r *repository) GetConversation(userID, convoID string) (*Conversation, err
 		return nil, err
 	}
 
-	convo.Lines = make([]Line, 0)
-
-	err = r.findConvoLines.Select(convo.Lines, struct{ ID int }{convo.ID})
+	rows, err := r.findConvoLines.Queryx(struct{ ID int }{convo.IntID})
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	return &convo, nil
+	convo.Lines = make([]Line, 0)
+	for rows.Next() {
+		var rec lineRec
+		if err := rows.StructScan(&rec); err != nil {
+			return nil, err
+		}
+
+		setLineMood(&rec)
+		if rec.mood == nil {
+			return nil, fmt.Errorf("Line %s does not have a valid mood", rec.ID)
+		}
+
+		convo.Lines = append(convo.Lines, rec.Line)
+	}
+
+	return &convo.Conversation, nil
 }
 
 func (r *repository) DeleteConversation(userID, convoID string) error {
@@ -312,10 +390,10 @@ func (r *repository) DeleteConversation(userID, convoID string) error {
 	return nil
 }
 
-func (r *repository) InsertLine(userID, convoID string, l *Line) error {
+func (r *repository) InsertLine(userID, convoID string, line *Line) error {
 	var publicID string
 
-	var convo Conversation
+	var convo convoRec
 	err := r.getConvo.Get(&convo, struct{ UserID, PublicID string }{userID, convoID})
 	if err != nil {
 		return err
@@ -328,13 +406,25 @@ func (r *repository) InsertLine(userID, convoID string, l *Line) error {
 		}
 		publicID = lineIDPrefix + strconv.FormatUint(rv.Uint64(), 36)
 
-		_, err = r.insertConvo.Exec(struct {
-			PublicID, Animal, Text string
-			Think                  bool
-			MoodID, CovnersationID int
-		}{publicID, l.Animal, l.Text, l.Think, l.Mood.ID, convo.ID})
+		var moodID sql.NullInt64
+		if line.mood.id != 0 {
+			moodID.Int64 = int64(line.mood.id)
+			moodID.Valid = true
+		}
+
+		_, err = r.insertLine.Exec(struct {
+			PublicID, Animal, Text, MoodName string
+			Think                            bool
+			MoodID                           sql.NullInt64
+			ConversationID                   int
+		}{
+			publicID, line.Animal, line.Text, line.MoodName,
+			line.Think,
+			moodID,
+			convo.IntID,
+		})
 		if err == nil {
-			l.PublicID = publicID
+			line.ID = publicID
 			return nil
 		}
 
@@ -348,16 +438,21 @@ func (r *repository) InsertLine(userID, convoID string, l *Line) error {
 }
 
 func (r *repository) GetLine(userID, convoID, lineID string) (*Line, error) {
-	var l Line
+	var rec lineRec
 
-	err := r.getLine.Get(&l, struct{ UserID, ConvoID, LineID string }{userID, convoID, lineID})
+	err := r.getLine.Get(&rec, struct{ UserID, ConvoID, LineID string }{userID, convoID, lineID})
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}
 
-	return &l, nil
+	setLineMood(&rec)
+	if rec.mood == nil {
+		return nil, fmt.Errorf("Line %s does not have a valid mood", rec.ID)
+	}
+
+	return &rec.Line, nil
 }
 
 func (r *repository) DeleteLine(userID, convoID, lineID string) error {
@@ -367,4 +462,33 @@ func (r *repository) DeleteLine(userID, convoID, lineID string) error {
 	}
 
 	return nil
+}
+
+func setLineMood(rec *lineRec) {
+	if rec.Eyes.Valid {
+		rec.mood = &Mood{
+			Name:        rec.MoodName,
+			Eyes:        rec.Eyes.String,
+			Tongue:      rec.Tongue.String,
+			UserDefined: true,
+		}
+		return
+	}
+
+	for _, mood := range builtinMoods {
+		if strings.EqualFold(mood.Name, rec.MoodName) {
+			m := *mood
+			rec.mood = &m
+			return
+		}
+	}
+}
+
+func isBuiltin(name string) bool {
+	for _, builtin := range builtinMoods {
+		if strings.EqualFold(builtin.Name, name) {
+			return true
+		}
+	}
+	return false
 }

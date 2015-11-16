@@ -1,4 +1,4 @@
-# saypi
+# saypi (say-pee-eye)
 Cowsay API to demonstrate several golang design patterns
 
 # API
@@ -9,15 +9,13 @@ Cowsay API to demonstrate several golang design patterns
 
 The conversation API requires HTTP Bearer authorization. After creating a user, pass a header of the form `Authorization: Bearer myuserid123`.
 
-### Errors
-
-TODO: Error codes
-TODO: Rate limits, object creation limits.
-
-
 ### Pagination
 
-TODO
+Cursor-based, just like the Stripe API. List responses have the
+following fields:
+* `Type`[string]: Type of object contained in the response.
+* `HasMore`[bool]: Whether there are more object available than returned.
+* `Data`[array]: Array of objects.
 
 ## Endpoints
 
@@ -60,11 +58,13 @@ Create or update a mood. You can only update moods you created.
 
 Retrieve an existing mood.
 
-*Success Response*: A mood
+*Success Response*: A `mood`
 
 ### DELETE /moods/:name
 
-Permanently delete a mood that you created. Returns a 204 with no content.
+Permanently delete a mood that you created.
+
+*Success Response*: (204 No Content)
 
 ### GET /conversations
 
@@ -76,37 +76,44 @@ Returns a list of your conversations.
 
 Creates a new conversation with the specified name for your user account.
 
-*Parameters* (none)
+*Parameters*
+* `heading`[string]: A name for the conversation
 
 *Success Response*: A `conversation`
 
-### GET /conversations/:id
+### GET /conversations/:conversation_id
 
 Retrieves an existing conversation. 
 
 *Success Response*: A `conversation`
 
-### DELETE /conversations/:name
+### DELETE /conversations/:conversation_id
 
 Deletes the conversation permananently.
 
-### POST /conversations/:name/lines
+### POST /conversations/:conversation_id/lines
 
 Add a new line to the conversation
 
 *Parameters*
 * `animal`[string]: Name of the animal to speak.
-* `mood`[string]: Customize the tongue and eyes of the animal to its mood. 
+* `think` [bool]: Whether to show the animal thinking as opposed to speaking.
+* `mood`[string]: Customize the tongue and eyes of the animal to its mood.
+* `text` [string]: Text for the animal to speak or think.
 
-### GET /conversations/:name/lines/:id
+*Success Response*: A `line`
+
+### GET /conversations/:conversation_id/lines/:line_id
 
 Retrieves a line from the conversation
 
-*Success Response*: A line
+*Success Response*: A `line`
 
-### DELETE /conversations/:name/lines/:id
+### DELETE /conversations/:conversation_id/lines/:line_id
 
 Permanently deletes a line from the conversation.
+
+*Success Response*: (204 No Content)
 
 ## API objects
 
@@ -130,9 +137,16 @@ Permanently deletes a line from the conversation.
 * `eyes`[string]: A two character string for the animal's eyes.
 * `tongue`[string]: A two character string representing the animal's tongue.
 
-# Notes
-* Use 201 created with Location header to force generating internal URLs?
+# TODOs and Qs
+* Use 201 created with Location header to force generating internal URLs? Return next/prev URLs for pagination in the Location header like Greenhouse?
 * Package descriptions
 * Concurrency + race detection in mux routing
 * Generate public URLs for a conversation
 * frontend interface, Go as a static fileserver, JS tests running against stub
+* Use API client to write sane tests
+* Tests for invalid params to say controller
+* Error codes and general error handling (including custom errors from middleware)
+* Object creation limits
+* Fix cursor-based pagination to match Stripe API behavior
+* Dependency management (vendor experiment?)
+* Support rendering conversations as text instead of JSON
