@@ -15,6 +15,7 @@ import (
 	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/dbutil"
 	"github.com/metcalf/saypi/log"
+	"github.com/metcalf/saypi/metrics"
 	"github.com/metcalf/saypi/say"
 )
 
@@ -68,7 +69,9 @@ func New(config *Configuration) (*App, error) {
 	}
 	app.closers = append(app.closers, sayCtrl)
 
+	// TODO: Proper not found handler
 	privMux := goji.NewMux()
+	privMux.UseC(metrics.WrapSubmuxC)
 	privMux.UseC(authCtrl.WrapC)
 
 	privMux.HandleFunc(pat.Get("/animals"), sayCtrl.GetAnimals)
@@ -96,6 +99,7 @@ func New(config *Configuration) (*App, error) {
 		return recovery.Wrap(h, recovery.LogOnPanic)
 	})
 	mainMux.UseC(log.WrapC)
+	mainMux.UseC(metrics.WrapC)
 	mainMux.Use(ipLimiter.RateLimit)
 
 	app.Srv = mainMux
