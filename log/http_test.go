@@ -8,8 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"goji.io"
+
 	"github.com/metcalf/saypi/log"
-	"github.com/metcalf/saypi/mux"
 	"golang.org/x/net/context"
 )
 
@@ -19,7 +20,7 @@ func TestWrapC(t *testing.T) {
 
 	var setOK bool
 
-	bare := mux.HandlerFuncC(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	bare := goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		setOK = log.SetContext(ctx, "hey", "oh")
 		w.WriteHeader(http.StatusOK)
 	})

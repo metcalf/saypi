@@ -4,6 +4,9 @@ import (
 	"io"
 	"net/http"
 
+	"goji.io"
+	"goji.io/pat"
+
 	"gopkg.in/throttled/throttled.v2"
 	"gopkg.in/throttled/throttled.v2/store/memstore"
 
@@ -12,7 +15,6 @@ import (
 	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/dbutil"
 	"github.com/metcalf/saypi/log"
-	"github.com/metcalf/saypi/mux"
 	"github.com/metcalf/saypi/say"
 )
 
@@ -66,38 +68,37 @@ func New(config *Configuration) (*App, error) {
 	}
 	app.closers = append(app.closers, sayCtrl)
 
-	mainMux := mux.New()
-	mainMux.RouteFuncC(mux.Pattern("POST", "/users"), authCtrl.CreateUser)
-	mainMux.RouteFuncC(mux.Pattern("GET", "/users/:id"), authCtrl.GetUser)
+	privMux := goji.NewMux()
+	privMux.UseC(authCtrl.WrapC)
 
-	privMux := mux.New()
-	// TODO: We don't really want random paths returning a 403 instead of a
-	mainMux.NotFoundHandler = authCtrl.WrapC(privMux)
+	privMux.HandleFunc(pat.Get("/animals"), sayCtrl.GetAnimals)
 
-	privMux.RouteFunc(mux.Pattern("GET", "/animals"), sayCtrl.GetAnimals)
+	privMux.HandleFuncC(pat.Get("/moods"), sayCtrl.ListMoods)
+	privMux.HandleFuncC(pat.Put("/moods/:mood"), sayCtrl.SetMood)
+	privMux.HandleFuncC(pat.Get("/moods/:mood"), sayCtrl.GetMood)
+	privMux.HandleFuncC(pat.Delete("/moods/:mood"), sayCtrl.DeleteMood)
 
-	privMux.RouteFuncC(mux.Pattern("GET", "/moods"), sayCtrl.ListMoods)
-	privMux.RouteFuncC(mux.Pattern("PUT", "/moods/:mood"), sayCtrl.SetMood)
-	privMux.RouteFuncC(mux.Pattern("GET", "/moods/:mood"), sayCtrl.GetMood)
-	privMux.RouteFuncC(mux.Pattern("DELETE", "/moods/:mood"), sayCtrl.DeleteMood)
+	privMux.HandleFuncC(pat.Get("/conversations"), sayCtrl.ListConversations)
+	privMux.HandleFuncC(pat.Post("/conversations"), sayCtrl.CreateConversation)
+	privMux.HandleFuncC(pat.Get("/conversations/:conversation"), sayCtrl.GetConversation)
+	privMux.HandleFuncC(pat.Delete("/conversations/:conversation"), sayCtrl.DeleteConversation)
 
-	privMux.RouteFuncC(mux.Pattern("GET", "/conversations"), sayCtrl.ListConversations)
-	privMux.RouteFuncC(mux.Pattern("POST", "/conversations"), sayCtrl.CreateConversation)
-	privMux.RouteFuncC(mux.Pattern("GET", "/conversations/:conversation"), sayCtrl.GetConversation)
-	privMux.RouteFuncC(mux.Pattern("DELETE", "/conversations/:conversation"), sayCtrl.DeleteConversation)
+	privMux.HandleFuncC(pat.Post("/conversations/:conversation/lines"), sayCtrl.CreateLine)
+	privMux.HandleFuncC(pat.Get("/conversations/:conversation/lines/:line"), sayCtrl.GetLine)
+	privMux.HandleFuncC(pat.Delete("/conversations/:conversation/lines/:line"), sayCtrl.DeleteLine)
 
-	privMux.RouteFuncC(mux.Pattern("POST", "/conversations/:conversation/lines"), sayCtrl.CreateLine)
-	privMux.RouteFuncC(mux.Pattern("GET", "/conversations/:conversation/lines/:line"), sayCtrl.GetLine)
-	privMux.RouteFuncC(mux.Pattern("DELETE", "/conversations/:conversation/lines/:line"), sayCtrl.DeleteLine)
+	mainMux := goji.NewMux()
+	mainMux.HandleFuncC(pat.Post("/users"), authCtrl.CreateUser)
+	mainMux.HandleFuncC(pat.Get("/users/:id"), authCtrl.GetUser)
+	mainMux.HandleC(pat.New("/*"), privMux)
 
-	mw := mux.NewMiddleware()
-	mw.Add(func(h http.Handler) http.Handler {
+	mainMux.Use(func(h http.Handler) http.Handler {
 		return recovery.Wrap(h, recovery.LogOnPanic)
 	})
-	mw.AddC(log.WrapC)
-	mw.Add(ipLimiter.RateLimit)
+	mainMux.UseC(log.WrapC)
+	mainMux.Use(ipLimiter.RateLimit)
 
-	app.Srv = mw.Wrap(mainMux)
+	app.Srv = mainMux
 
 	return &app, nil
 }

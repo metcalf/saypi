@@ -7,11 +7,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"goji.io"
+
 	"golang.org/x/net/context"
 
 	"github.com/metcalf/saypi/app"
 	"github.com/metcalf/saypi/auth"
-	"github.com/metcalf/saypi/mux"
 )
 
 func TestAppCreateAndGet(t *testing.T) {
@@ -72,7 +73,7 @@ func TestWrapC(t *testing.T) {
 
 	var ctx, lastCtx context.Context
 
-	handler := ctrl.WrapC(mux.HandlerFuncC(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	handler := ctrl.WrapC(goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		lastCtx = ctx
 		w.WriteHeader(http.StatusOK)
 	}))

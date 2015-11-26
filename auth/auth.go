@@ -9,8 +9,11 @@ import (
 	"net/http"
 	"strings"
 
+	"goji.io/pat"
+
+	"goji.io"
+
 	"github.com/metcalf/saypi/log"
-	"github.com/metcalf/saypi/mux"
 	"golang.org/x/net/context"
 )
 
@@ -59,13 +62,12 @@ func (c *Controller) CreateUser(ctx context.Context, w http.ResponseWriter, r *h
 }
 
 func (c *Controller) GetUser(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	match := mux.FromContext(ctx)
-	if match == nil {
+	id := pat.Param(ctx, "id")
+	if id == "" {
 		panic("GetUser called without an `id` URL Var")
 	}
-	auth := match.Vars().Get("id")
 
-	if c.getUser(auth) != nil {
+	if c.getUser(id) != nil {
 		w.WriteHeader(204)
 	} else {
 		http.NotFound(w, r)
@@ -73,8 +75,8 @@ func (c *Controller) GetUser(ctx context.Context, w http.ResponseWriter, r *http
 }
 
 // WrapC wraps a handler and only passes requests with valid Bearer authorization.
-func (c *Controller) WrapC(inner mux.HandlerC) mux.HandlerC {
-	return mux.HandlerFuncC(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+func (c *Controller) WrapC(inner goji.Handler) goji.Handler {
+	return goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
 			http.Error(w, "You must provide a Bearer token in an Authorization header", http.StatusUnauthorized)

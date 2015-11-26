@@ -6,7 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/metcalf/saypi/mux"
+	"goji.io"
+
 	"github.com/zenazn/goji/web/mutil"
 	"golang.org/x/net/context"
 )
@@ -18,7 +19,7 @@ const (
 
 // WrapC wraps a mux.HandlerC to log to the standard logger after the
 // request completes.
-func WrapC(handler mux.HandlerC) mux.HandlerC {
+func WrapC(handler goji.Handler) goji.Handler {
 	return logger.WrapC(handler)
 }
 
@@ -35,11 +36,11 @@ func SetContext(ctx context.Context, key string, value interface{}) bool {
 }
 
 // WrapC wraps a mux.HandlerC to log to l after the request completes.
-func (l *Logger) WrapC(h mux.HandlerC) mux.HandlerC {
+func (l *Logger) WrapC(h goji.Handler) goji.Handler {
 	// this takes the request and response, and tees off a copy of both
 	// (truncated to a configurable length), and stores them in the request context
 	// for later logging
-	return mux.HandlerFuncC(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	return goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
 		extra, ok := ctx.Value(ctxKey).(map[string]interface{})

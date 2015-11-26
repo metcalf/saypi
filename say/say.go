@@ -5,16 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"syscall"
 	"unicode/utf8"
 
+	"goji.io/pat"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/log"
-	"github.com/metcalf/saypi/mux"
 
 	"golang.org/x/net/context"
 )
@@ -131,7 +131,7 @@ func (c *Controller) ListMoods(ctx context.Context, w http.ResponseWriter, r *ht
 
 func (c *Controller) GetMood(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
-	name := mustURLVar(ctx, "mood")
+	name := pat.Param(ctx, "mood")
 
 	res, err := c.repo.GetMood(userID, name)
 	if err != nil {
@@ -147,7 +147,7 @@ func (c *Controller) GetMood(ctx context.Context, w http.ResponseWriter, r *http
 
 func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
-	name := mustURLVar(ctx, "mood")
+	name := pat.Param(ctx, "mood")
 
 	eyes := r.PostFormValue("eyes")
 	if !(eyes == "" || utf8.RuneCountInString(eyes) == 2) {
@@ -176,7 +176,7 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 
 func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
-	name := mustURLVar(ctx, "mood")
+	name := pat.Param(ctx, "mood")
 
 	if err := c.repo.DeleteMood(userID, name); err != nil {
 		panic(err)
@@ -225,7 +225,7 @@ func (c *Controller) CreateConversation(ctx context.Context, w http.ResponseWrit
 
 func (c *Controller) GetConversation(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
-	convoID := mustURLVar(ctx, "conversation")
+	convoID := pat.Param(ctx, "conversation")
 
 	convo, err := c.repo.GetConversation(userID, convoID)
 	if err != nil {
@@ -248,7 +248,7 @@ func (c *Controller) GetConversation(ctx context.Context, w http.ResponseWriter,
 
 func (c *Controller) DeleteConversation(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
-	convoID := mustURLVar(ctx, "conversation")
+	convoID := pat.Param(ctx, "conversation")
 
 	if err := c.repo.DeleteConversation(userID, convoID); err != nil {
 		panic(err)
@@ -259,7 +259,7 @@ func (c *Controller) DeleteConversation(ctx context.Context, w http.ResponseWrit
 
 func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
-	convoID := mustURLVar(ctx, "conversation")
+	convoID := pat.Param(ctx, "conversation")
 
 	var think bool
 	switch r.PostFormValue("think") {
@@ -324,8 +324,8 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 
 func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
-	convoID := mustURLVar(ctx, "conversation")
-	lineID := mustURLVar(ctx, "line")
+	convoID := pat.Param(ctx, "conversation")
+	lineID := pat.Param(ctx, "line")
 
 	line, err := c.repo.GetLine(userID, convoID, lineID)
 	if err != nil {
@@ -346,8 +346,8 @@ func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http
 
 func (c *Controller) DeleteLine(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
-	convoID := mustURLVar(ctx, "conversation")
-	lineID := mustURLVar(ctx, "line")
+	convoID := pat.Param(ctx, "conversation")
+	lineID := pat.Param(ctx, "line")
 
 	if err := c.repo.DeleteLine(userID, convoID, lineID); err != nil {
 		panic(err)
@@ -373,27 +373,6 @@ func mustUserID(ctx context.Context) string {
 	}
 
 	return user.ID
-}
-
-func mustURLVar(ctx context.Context, key string) string {
-	vals, ok := mustMatchVars(ctx)[key]
-
-	if !ok || len(vals) < 1 {
-		panic(fmt.Errorf("Missing %q URL var in context", key))
-	}
-	if len(vals) > 1 {
-		panic(fmt.Errorf("Multiple %q URL var values in context: %s", key, vals))
-	}
-
-	return vals[0]
-}
-
-func mustMatchVars(ctx context.Context) url.Values {
-	match := mux.FromContext(ctx)
-	if match == nil {
-		panic(errors.New("Missing match in request context"))
-	}
-	return match.Vars()
 }
 
 func getListArgs(r *http.Request) (*listArgs, error) {
