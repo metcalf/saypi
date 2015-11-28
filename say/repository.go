@@ -25,9 +25,8 @@ const (
 SELECT id as int_id, name, eyes, tongue
 FROM moods
 WHERE user_id = :user_id AND
-  lower(name) > lower(:after) AND
-  (:before = '' OR lower(name) < lower(:before))
-ORDER BY lower(name) ASC
+  (:cursor_id < 0 OR id %s :cursor_id)
+ORDER BY 1 %s
 LIMIT :limit + 1
 `
 	findMood = `
@@ -60,10 +59,9 @@ SELECT id FROM updated UNION ALL SELECT id FROM inserted
 SELECT id as int_id, public_id as id, heading
 FROM conversations
 WHERE user_id = :user_id AND
-  public_id > :after AND
-  (:before = '' OR public_id < :before)
-ORDER BY id ASC
-LIMIT :limit + 1
+  (:cursor_id < 0 OR id %s :cursor_id)
+ORDER BY 1 %s
+LIMIT :limit
 `
 	insertConvo = `
 INSERT INTO conversations (public_id, user_id, heading)
@@ -110,13 +108,16 @@ WHERE
 `
 )
 
+// TODO: Return a user-facing error when the cursor is invalid
+var errCursorNotFound = errors.New("Invalid cursor")
+
 type repository struct {
 	db      *sqlx.DB
 	closers []io.Closer
 
-	listMoods, findMood, deleteMood, setMood        *sqlx.NamedStmt
-	listConvos, insertConvo, getConvo, deleteConvo  *sqlx.NamedStmt
-	findConvoLines, insertLine, getLine, deleteLine *sqlx.NamedStmt
+	listMoodsAsc, listMoodsDesc, findMood, deleteMood, setMood        *sqlx.NamedStmt
+	listConvosAsc, listConvosDesc, insertConvo, getConvo, deleteConvo *sqlx.NamedStmt
+	findConvoLines, insertLine, getLine, deleteLine                   *sqlx.NamedStmt
 }
 
 type listArgs struct {
@@ -155,11 +156,9 @@ func newRepository(db *sqlx.DB) (*repository, error) {
 	r := repository{db: db}
 
 	stmts := map[string]**sqlx.NamedStmt{
-		listMoods:      &r.listMoods,
 		findMood:       &r.findMood,
 		setMood:        &r.setMood,
 		deleteMood:     &r.deleteMood,
-		listConvos:     &r.listConvos,
 		insertConvo:    &r.insertConvo,
 		getConvo:       &r.getConvo,
 		deleteConvo:    &r.deleteConvo,
@@ -167,6 +166,11 @@ func newRepository(db *sqlx.DB) (*repository, error) {
 		insertLine:     &r.insertLine,
 		getLine:        &r.getLine,
 		deleteLine:     &r.deleteLine,
+
+		fmt.Sprintf(listConvos, ">", "ASC"):  &r.listConvosAsc,
+		fmt.Sprintf(listConvos, "<", "DESC"): &r.listConvosDesc,
+		fmt.Sprintf(listMoods, ">", "ASC"):   &r.listMoodsAsc,
+		fmt.Sprintf(listMoods, "<", "DESC"):  &r.listMoodsDesc,
 	}
 
 	for sqlStr, stmt := range stmts {
@@ -192,13 +196,121 @@ func (r *repository) Close() error {
 }
 
 // TODO: Handle cases with builtin moods before/after
-func (r *repository) ListMoods(userID string, args *listArgs) ([]Mood, bool, error) {
+func (r *repository) ListMoods(userID string, args listArgs) ([]Mood, bool, error) {
+	sources := make([]func(bool, listArgs) ([]Mood, bool, error), 2)
+
+	userSrc := func(asc bool, args listArgs) ([]Mood, bool, error) {
+		return r.listUserMoods(userID, asc, args)
+	}
+
+	var asc bool
+	if sortAsc(args) {
+		asc = true
+		sources[0] = userSrc
+		sources[1] = r.listBuiltinMoods
+	} else {
+		asc = false
+		sources[1] = userSrc
+		sources[0] = r.listBuiltinMoods
+	}
+
+	moods, _, err := sources[0](asc, args)
+	if err != nil {
+		if err != errCursorNotFound {
+			return nil, false, err
+		}
+	} else {
+		args.Limit = args.Limit - len(moods)
+		args.Before = ""
+		args.After = ""
+
+		if len(moods) == args.Limit {
+			return moods, true, nil
+		}
+	}
+
+	moreMoods, hasMore, err := sources[1](asc, args)
+	if err != nil {
+		return nil, false, err
+	}
+
+	for _, mood := range moreMoods {
+		moods = append(moods, mood)
+	}
+
+	return moods, hasMore, nil
+
+}
+
+func (r *repository) listBuiltinMoods(asc bool, args listArgs) ([]Mood, bool, error) {
 	var moods []Mood
 
-	rows, err := r.listMoods.Queryx(struct {
-		UserID string
-		*listArgs
-	}{userID, args})
+	cursor := args.After
+	if !asc {
+		cursor = args.Before
+	}
+
+	limit := args.Limit + 1
+
+	found := args.After == "" && args.Before == ""
+	for i := 0; i < len(builtinMoods); i++ {
+		var mood *Mood
+		if asc {
+			mood = builtinMoods[i]
+		} else {
+			mood = builtinMoods[len(builtinMoods)-1-i]
+		}
+
+		if found {
+			moods = append(moods, *mood)
+			if len(moods) == limit {
+				break
+			}
+		} else if mood.Name == cursor {
+			found = true
+		}
+	}
+
+	if !found {
+		return nil, false, errCursorNotFound
+	}
+
+	hasMore := len(moods) > args.Limit
+	if hasMore {
+		moods = moods[:args.Limit]
+	}
+
+	return moods, hasMore, nil
+}
+
+func (r *repository) listUserMoods(userID string, asc bool, args listArgs) ([]Mood, bool, error) {
+	var moods []Mood
+
+	cursor := args.After
+	query := r.listMoodsAsc
+	if !asc {
+		cursor = args.Before
+		query = r.listMoodsDesc
+	}
+
+	cursorID := -1
+	if cursor != "" {
+		var mood moodRec
+
+		err := r.findMood.Get(&mood, struct{ UserID, Name string }{userID, cursor})
+		if err == sql.ErrNoRows {
+			return nil, false, errCursorNotFound
+		} else if err != nil {
+			return nil, false, err
+		} else {
+			cursorID = mood.IntID
+		}
+	}
+
+	rows, err := query.Queryx(struct {
+		UserID          string
+		CursorID, Limit int
+	}{userID, cursorID, args.Limit + 1})
 	if err != nil {
 		return nil, false, err
 	}
@@ -218,10 +330,6 @@ func (r *repository) ListMoods(userID string, args *listArgs) ([]Mood, bool, err
 	hasMore := len(moods) > args.Limit
 	if hasMore {
 		moods = moods[:args.Limit]
-	}
-
-	for _, mood := range builtinMoods {
-		moods = append(moods, *mood)
 	}
 
 	return moods, hasMore, nil
@@ -286,13 +394,34 @@ func (r *repository) DeleteMood(userID, name string) error {
 	return nil
 }
 
-func (r *repository) ListConversations(userID string, args *listArgs) ([]Conversation, bool, error) {
+func (r *repository) ListConversations(userID string, args listArgs) ([]Conversation, bool, error) {
 	var convos []Conversation
 
-	rows, err := r.listConvos.Queryx(struct {
-		UserID string
-		*listArgs
-	}{userID, args})
+	cursor := args.After
+	query := r.listConvosAsc
+	if !sortAsc(args) {
+		cursor = args.Before
+		query = r.listConvosDesc
+	}
+
+	cursorID := -1
+	if cursor != "" {
+		var convo convoRec
+
+		err := r.getConvo.Get(&convo, struct{ UserID, PublicID string }{userID, cursor})
+		if err == sql.ErrNoRows {
+			return nil, false, errCursorNotFound
+		} else if err != nil {
+			return nil, false, err
+		} else {
+			cursorID = convo.IntID
+		}
+	}
+
+	rows, err := query.Queryx(struct {
+		UserID          string
+		CursorID, Limit int
+	}{userID, cursorID, args.Limit + 1})
 	if err != nil {
 		return nil, false, err
 	}
@@ -377,6 +506,8 @@ func (r *repository) GetConversation(userID, convoID string) (*Conversation, err
 
 		convo.Lines = append(convo.Lines, rec.Line)
 	}
+
+	convo.Conversation.id = convo.IntID
 
 	return &convo.Conversation, nil
 }
@@ -491,4 +622,8 @@ func isBuiltin(name string) bool {
 		}
 	}
 	return false
+}
+
+func sortAsc(args listArgs) bool {
+	return args.After != "" || args.Before == ""
 }

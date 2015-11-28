@@ -375,10 +375,14 @@ func mustUserID(ctx context.Context) string {
 	return user.ID
 }
 
-func getListArgs(r *http.Request) (*listArgs, error) {
+func getListArgs(r *http.Request) (listArgs, error) {
 	res := listArgs{
 		After:  r.FormValue("starting_after"),
 		Before: r.FormValue("ending_before"),
+	}
+
+	if res.After != "" && res.Before != "" {
+		return listArgs{}, errors.New("You may not pass `ending_before` if you pass `starting_after`")
 	}
 
 	var err error
@@ -387,13 +391,13 @@ func getListArgs(r *http.Request) (*listArgs, error) {
 		res.Limit = defaultListLimit
 	} else {
 		res.Limit, err = strconv.Atoi(limitStr)
-		if err != nil || res.Limit < 1 || res.Limit > maxListLimit {
+		if err != nil || res.Limit < 0 || res.Limit > maxListLimit {
 			msg := fmt.Sprintf("limit must be a positive integer less than %d", maxListLimit)
-			return nil, errors.New(msg)
+			return listArgs{}, errors.New(msg)
 		}
 	}
 
-	return &res, nil
+	return res, nil
 }
 
 func respond(w http.ResponseWriter, data interface{}) {

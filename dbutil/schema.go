@@ -47,6 +47,7 @@ func NewTestDB() (*testdb.TestDB, *sqlx.DB, error) {
 	}
 
 	dbx := sqlx.NewDb(db, DriverName)
+	dbx.MapperFunc(MapperFunc())
 
 	return tdb, dbx, nil
 }

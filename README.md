@@ -125,24 +125,28 @@ landed on the right patterns.
 Want to [help us solve these problems and much more](https://stripe.com/jobs/positions/engineer/)?
 
 # TODOs and Qs
-* Use 201 created with Location header to force generating internal
-  URLs? Return next/prev URLs for pagination in the Location header
-  like Greenhouse?
-* Package descriptions
-* Generate public URLs for a conversation (maybe have auth package
-  support returning a public version of any url?)
-* frontend interface, Go as a static fileserver, JS tests running against stub
-* Use API client to write sane tests
 * Tests for invalid params to say controller
+* Use API client to write sane tests
 * Error codes and general error handling (including custom errors from
   middleware)
-* Object creation limits
-* Fix cursor-based pagination to match Stripe API behavior
-* Dependency management (vendor experiment?)
 * Support rendering conversations as text instead of JSON
 * Request IDs in log lines
 * App should implement http.Handler
+
+## Boring TODO
+* Package descriptions
+* Dependency management (vendor experiment?)
+
+## Maybe TODO
+* Use 201 created with Location header to force generating internal
+  URLs? Return next/prev URLs for pagination in the Location header
+  like Greenhouse?
+* Generate public URLs for a conversation (maybe have auth package
+  support returning a public version of any url?)
 * What about user errors implementing a "type" that clients can unmarshal?
+* frontend interface, Go as a static fileserver, JS tests running against stub
+* Object creation limits
+* Write an example of refactoring list queries to use a read-replica
 
 ## Maybe include these patterns?
 * API clients across multiple languages
