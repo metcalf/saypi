@@ -1,152 +1,151 @@
 # saypi (say-pee-eye)
-Cowsay API to demonstrate several golang design patterns
 
-# API
+Cowsay API to demonstrate several Golang design [patterns] we've used
+successfully at Stripe.
 
-## Common Behaviors
+## API Docs
 
-### Authentication
+We haven't found a consistent pattern for documenting service
+APIs. Sharing client code helps but doesn't fulfill all the needs of
+good documentation. For now we rely on
+[manually maintained markdown files](api.md) such as the one in this
+repository.
 
-The conversation API requires HTTP Bearer authorization. After creating a user, pass a header of the form `Authorization: Bearer myuserid123`.
+# Patterns
 
-### Pagination
+## Repositories
 
-Cursor-based, just like the Stripe API. List responses have the
-following fields:
-* `Type`[string]: Type of object contained in the response.
-* `HasMore`[bool]: Whether there are more object available than returned.
-* `Data`[array]: Array of objects.
+In our monolithic Ruby codebase, we access data via an
+ActiveRecord-inspired library. Models are accessible to any part of
+the application and any part of the code can perform essentially
+arbitrary actions against the database (e.g. updating a particular
+field, running custom commands). The ORM provides a lot of power out
+of the box and abstracts away a ton of thinking about the interface
+with your persistence layer. I'd argue that this is a mistake --
+persistence is one of the most challenging parts of developing a
+consistent and scalable application and shouldn't be treated as a
+generic problem.
 
-## Endpoints
+In saypi, all access to the database is wrapped by
+[`repository` types](https://github.com/metcalf/saypi/blob/master/say/repository.go).
+The *only* way to communicate with the database is through the narrow
+interface defined on each `repository`. You'll never see a `Save`
+method allowing you to update arbitrary data on a model. This makes
+data access patterns more predictable, testable and refactorable. For
+example:
+* You can't accidentally write code in an unrelated module that
+  triggers a full table scan.
+* You can easily stub out the database in unrelated unit tests.
+* You can refactor data access patterns in one place, with a clearly
+  testable interface. For example, I was able to add read replicas
+  with minimal code churn.
 
-### POST /users
+## Handler interface
 
-Create a new user for authenticating with the conversation API.
+We agree with
+[Square's assessment that full-featured web frameworks are unncessary in Go](https://corner.squareup.com/2014/05/evaluating-go-frameworks.html). We
+found that the specific choice of mux and handler interface doesn't
+matter nearly as much as agreeing on a consistent pattern. For
+example, it's important that all of our applications provide the same
+request IDs in their log lines and can use the same package to record
+consistent metrics.
 
-*Parameters* (none)
+We use [the context package](http://blog.golang.org/context) to pass
+request-scoped values and our handlers use the signature `func(ctx
+context.Context, rw http.ResponseWriter, req *http.Request)`.
+[Goji](https://github.com/goji/goji) makes it easy to mix-and-match
+our handlers and middleware with code that assumes an `http.Handler`.
 
-*Success Response*
-* `id`[string]: A user ID that serves as an authentication token for the API
+## Error handling
 
-### GET /users/:id
+Our first Go applications sufferred from two major error handling
+problems.
 
-Returns a response indicating if the provided user ID exists (204) or not (404).
+First, unhandled errors would bubble up the stack and panic in the
+controller. We would report the stacktrace to Sentry but it was
+difficult to debug exactly where these errors originated (e.g. which query
+caused that uniqueness violation in the database?). We like the
+approach from [Juju's errors package](https://github.com/juju/errors)
+of wrapping errors to include information such as the original
+stacktrace. For unhandled errors we can log enough context to make
+debugging possible and for well-handled errors we can log additional
+context for operators while returning a sane response to the client.
 
-### GET /animals
+The second problem was returning these sane and useful responses to
+the client. Early on, I introduced a (harmless) server-side request
+forgery vulnerability from an errant `err.Error()` return. I switched
+to returning minimal information with error responses, making my
+services harder to use. We've since settled on a pattern where any
+error returned to the user must advertise a machine-readable error
+code and human-readable message by implementing a `UserError`
+interface. Human-readable messages can be detailed enough to make
+debugging easy while machine-readable codes provide a complete
+itemization of errors that the client should be prepared to
+handle.
 
-Return a list of available animals for conversations.
+## Initialization and the `main` method
 
-*Success Response*
-* `animals`[array]: Array of animal name strings.
+Get out of your `main` method as quickly as possible! Command-line
+arguments and environment variables offer an untyped interface that
+makes testing difficult and error-prone.
 
-### GET /moods
+The `main` method should do little more than read configuration from
+the environment. Saypi pushes the limit of what a `main` method should
+do by binding to a port and setting up graceful
+shutdown. Initialization such as connecting to the database should be
+[handled by a separate `App` type](https://github.com/metcalf/saypi/blob/master/app/app.go)
+that takes typed configuration from `main` and implements
+`http.Handler`. The `App` is easy to instantiate in tests without
+mucking with the environment and string-based configuration. It makes
+it easy to write functional tests that exercise initialization paths
+without deeply coupling packages in your app to each other.
 
-Return a list of available moods with which to customize the eyes and
-tongue of your animals.
+## Missing pieces
 
-*Success Response*: A list response of `mood`s
+We've learned a lot working Go into new services over the past year
+but there are still a few places where we don't quite feel like we've
+landed on the right patterns.
+* Configuration: We've used a mix of command-line flags, environment
+  variables and JSON files to configure our applications. Across
+  Stripe, we like environment variables as a default but some services
+  have complex configuration that's easier to represent in a
+  file. Passing secrets to the application introduces further
+  wrinkles.
+* Healthchecking: Deep healthchecks risk falsely marking every
+  instance of a service as down rather than entering a degraded state
+  while very shallow healthchecks can mask problems on a single
+  instance. This isn't a Go specific problem, but we'll likely have to
+  solve it in Go as our primary language for new services.
+* Testing: We tried suite-based interfaces like Gocheck and Ginkgo but
+  felt like we were fighting the language. We much prefer the stdlib
+  testing interfaces but haven't figured out how much to cede to an assertion
+  library like testify.assert. For now, our rule is that anything goes as long
+  as the tests are of the form `func Test*(t *testing.T)`.
 
-### PUT /moods/:name
-
-Create or update a mood. You can only update moods you created.
-
-*Parameters*
-* `eyes`[string]: A two character string for the animal's eyes.
-* `tongue`[string]: A two character string representing the animal's tongue.
-
-### GET /moods/:name
-
-Retrieve an existing mood.
-
-*Success Response*: A `mood`
-
-### DELETE /moods/:name
-
-Permanently delete a mood that you created.
-
-*Success Response*: (204 No Content)
-
-### GET /conversations
-
-Returns a list of your conversations.
-
-*Success Response*: A list response of `conversation`s without their `line`s.
-
-### POST /conversations
-
-Creates a new conversation with the specified name for your user account.
-
-*Parameters*
-* `heading`[string]: A name for the conversation
-
-*Success Response*: A `conversation`
-
-### GET /conversations/:conversation_id
-
-Retrieves an existing conversation. 
-
-*Success Response*: A `conversation`
-
-### DELETE /conversations/:conversation_id
-
-Deletes the conversation permananently.
-
-### POST /conversations/:conversation_id/lines
-
-Add a new line to the conversation
-
-*Parameters*
-* `animal`[string]: Name of the animal to speak.
-* `think` [bool]: Whether to show the animal thinking as opposed to speaking.
-* `mood`[string]: Customize the tongue and eyes of the animal to its mood.
-* `text` [string]: Text for the animal to speak or think.
-
-*Success Response*: A `line`
-
-### GET /conversations/:conversation_id/lines/:line_id
-
-Retrieves a line from the conversation
-
-*Success Response*: A `line`
-
-### DELETE /conversations/:conversation_id/lines/:line_id
-
-Permanently deletes a line from the conversation.
-
-*Success Response*: (204 No Content)
-
-## API objects
-
-### conversation
-* `id`[string]
-* `heading`[string]
-* `lines`[array[line]]
-
-### line
-
-* `id`[string]
-* `animal`[string]
-* `think` [bool]
-* `mood`[string]
-* `text`[string]
-* `output`[string]: Rendered text of the line.
-
-### mood
-* `name`[string]: A unique string name for the mood
-* `user_defined`[bool]: Indicates that the mood was created by the user, not built-in.
-* `eyes`[string]: A two character string for the animal's eyes.
-* `tongue`[string]: A two character string representing the animal's tongue.
+Want to [help us solve these problems and much more](https://stripe.com/jobs/positions/engineer/)?
 
 # TODOs and Qs
-* Use 201 created with Location header to force generating internal URLs? Return next/prev URLs for pagination in the Location header like Greenhouse?
+* Use 201 created with Location header to force generating internal
+  URLs? Return next/prev URLs for pagination in the Location header
+  like Greenhouse?
 * Package descriptions
-* Concurrency + race detection in mux routing
-* Generate public URLs for a conversation
+* Generate public URLs for a conversation (maybe have auth package
+  support returning a public version of any url?)
 * frontend interface, Go as a static fileserver, JS tests running against stub
 * Use API client to write sane tests
 * Tests for invalid params to say controller
-* Error codes and general error handling (including custom errors from middleware)
+* Error codes and general error handling (including custom errors from
+  middleware)
 * Object creation limits
 * Fix cursor-based pagination to match Stripe API behavior
 * Dependency management (vendor experiment?)
 * Support rendering conversations as text instead of JSON
+* Request IDs in log lines
+* App should implement http.Handler
+* What about user errors implementing a "type" that clients can unmarshal?
+
+## Maybe include these patterns?
+* API clients across multiple languages
+* Testing (pretty minimal... just use stdlib)
+* DI?
+* Dependency management?
