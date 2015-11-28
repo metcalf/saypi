@@ -1,0 +1,321 @@
+swagger: '2.0'
+info:
+  title: SayPI
+  description: Cowsay API to demonstrate several Golang design patterns we've used successfully at Stripe.
+  version: 0.0.1
+consumes: [application/x-www-form-urlencoded]
+produces: [application/json]
+paths:
+  /users:
+    post:
+      summary: Create User
+      description: |
+        Create a new user for authenticating with the conversation API.
+      responses:
+        '200':
+          description: New User
+          schema:
+            type: object
+            properties:
+              id:
+                type: string
+                description: A user ID that serves as an authentication token for the API
+            required: [id]
+      tags: [Authentication]
+  /users/{id}:
+    get:
+      summary: Get User
+      description: Query whether a User exists.
+      parameters:
+        - name: id
+          in: path
+          description: User ID
+          required: true
+          type: string
+      responses:
+        '204': 
+          description: User exists
+        '404':
+          description: User does not exist
+      tags: [Authentication]
+  /animals:
+    get:
+      summary: List animals
+      description: Return a list of animals available for conversations.
+      responses:
+        '200':
+          description: An object containing a list of animals.
+          schema:
+            type: object
+            properties:
+              animals:
+                type: array
+                items: {type: string}
+            required: [animals]
+      tags: [Say]
+  /moods:
+    get:
+      summary: List Moods
+      description: List user-defined and built-in moods. Note that the mood name is used as the cursor parameter for listing.
+      parameters:
+        - {$ref: '#/parameters/listStartingAfter'}
+        - {$ref: '#/parameters/listEndingBefore'}
+        - {$ref: '#/parameters/listLimit'}
+      responses:
+        '200':
+          description: List of Moods
+          schema: {$ref: '#/definitions/MoodList'}
+      tags: [Say]
+  /moods/{name}:
+    get:
+      summary: Get Mood
+      responses:
+        '200':
+          description: Retrieved mood
+          schema: {$ref: '#/definitions/Mood'}
+      tags: [Say]
+    put:
+      summary: Create or update a mood. 
+      description: Create a mood or update a mood you already created. Note that updates will be reflected in all conversations that use the mood.
+      parameters:
+        - name: eyes
+          type: string
+          in: formData
+          description: Two characters used for the animal's eyes.
+          pattern: '[ -~]{2}'
+        - name: tongue
+          type: string
+          in: formData
+          description: Two characters used for the animal's tongue.
+          pattern: '[ -~]{2}'
+      responses:
+        '200':
+          description: Updated or created Mood.
+          schema:  {$ref: '#/definitions/Mood'}
+      tags: [Say]
+    delete:
+      summary: Delete a user-defined mood.
+      description: Deletes a user-defined mood. It is an error to delete a built-in mood or a mood that is in-use by a conversation.
+      responses:
+        '204':
+          description: Mood deleted
+      tags: [Say]
+    parameters:
+      - name: name
+        type: string
+        pattern: '[ -~]{0,30}'
+        description: Unique name of the mood.
+        in: path
+        required: true
+  /conversations:
+    get:
+      summary: List your conversations.
+      parameters:
+        - {$ref: '#/parameters/listStartingAfter'}
+        - {$ref: '#/parameters/listEndingBefore'}
+        - {$ref: '#/parameters/listLimit'}
+      responses:
+        '200':
+          description: List of conversations
+          schema: {$ref: '#/definitions/ConversationList'}
+      tags: [Say]
+    post:
+      summary: Create a new conversation
+      parameters:
+        - name: heading
+          type: string
+          description: Heading describing this conversation.
+          pattern: '[ -~]{0,100}'
+          in: formData
+          required: true
+      responses:
+        '200':
+          description: A newly created conversation
+          schema: {$ref: '#/definitions/Conversation'}
+      tags: [Say]
+  /conversations/{conversation}:
+    get:
+      summary: Get an existing conversation.
+      responses:
+        '200':
+          description: A conversation
+          schema: {$ref: '#/definitions/Conversation'}
+      tags: [Say]
+    delete:
+      summary: Delete an existing conversation
+      responses:
+        '204':
+          description: Conversation deleted.
+      tags: [Say]
+    parameters:
+      - {$ref: '#/parameters/conversationID'}
+  /conversation/{conversation}/lines:
+    post:
+      summary: Add a new line to the conversation.
+      parameters:
+        - name: animal
+          type: string
+          description: Name of the animal speaking the line, as returned by the /animals endpoint.
+          pattern: \w+
+          in: formData
+        - name: think
+          type: boolean
+          description: Whether the animal is displayed thinking or speaking.
+          in: formData
+        - name: mood
+          type: string
+          description: Name referencing the mood of the animal.
+          pattern: '[ -~]{0,30}'
+          in: formData
+        - name: text
+          type: string
+          description: Text the animal is thinking or speaking.
+          pattern: '[ -~]{0,1000}'
+          in: formData
+      responses:
+        '200':
+          description: A newly created Line.
+          schema: {$ref: '#/definitions/Line'}
+      tags: [Say]
+    parameters:
+      - {$ref: '#/parameters/conversationID'}   
+  /conversation/{conversation}/lines/{line}:
+    get:
+      summary: Retrieve a line.
+      responses:
+        '200':
+          description: TheLine.
+          schema: {$ref: '#/definitions/Line'}  
+      tags: [Say]
+    delete:
+      summary: Delete a line from the conversation.
+      responses:
+        '204':
+          description: Line deleted.
+      tags: [Say]
+    parameters:
+      - {$ref: '#/parameters/conversationID'}  
+      - {$ref: '#/parameters/lineID'}        
+parameters:
+  listStartingAfter:
+    name: starting_after
+    type: string
+    in: query
+    description: A cursor for use in pagination. starting_after is an object ID that defines your place in the list. If provided, results are returned in ascending order of creation. It is an error to provide multiple cursor parameters.
+  listEndingBefore:
+    name: ending_before
+    type: string
+    in: query
+    description: A cursor for use in pagination. ending_before is an object ID that defines your place in the list. If provided, results are returned in descending order of creation. It is an error to provide multiple cursor parameters. 
+  listLimit:
+    name: limit
+    type: integer
+    in: query
+    description: A limit on the number of objects to be returned.
+    minimum: 0
+    maximum: 100
+  conversationID:
+    name: conversation
+    type: string
+    description: Conversation ID
+    in: path
+    required: true
+  lineID:
+    name: line
+    type: string
+    description: Line ID
+    in: path
+    required: true
+definitions:
+  Mood:
+    type: object
+    description: A Mood
+    properties:
+      name:
+        type: string
+        description: Unique name of the mood
+      eyes:
+        type: string
+        description: Two characters used for the animal's eyes
+      tongue:
+        type: string
+        description: Two characters used for the animal's tongue
+      user_defined:
+        type: boolean
+        description: Indicates whether the mood was created by the user or built-in to the application
+    required: [name, eyes, tongue, user_defined]
+  Line:
+    type: object
+    properties:
+      id: 
+        type: string
+        description: Unique ID for the line
+      animal:
+        type: string
+        description: Name of the animal speaking the line
+      think:
+        type: boolean
+        description: Indicates whether the animal is displayed thinking or speaking
+      mood:
+        type: string
+        description: Name referencing the mood of the animal
+      test:
+        type: string
+        description: Text the animal is thinking or speaking
+      output:
+        type: string
+        description: Rendered output of the line
+    required: [id, animal, think, mood, test, output]
+  ConversationWithoutLines:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Unique ID for the conversation
+      heading:
+        type: string
+        description: Title displayed for the conversation
+    required: [id, heading]
+  Conversation:
+    type: object
+    allOf:
+      - $ref: '#/definitions/ConversationWithoutLines'
+      - type: object
+        properties:
+          line:
+            type: array
+            items: {$ref: '#/definitions/Line'}
+        required: [line]
+  List:
+    type: object
+    properties:
+      type:
+        type: string
+        description: A string describing the object type returned
+      has_more:
+        type: boolean
+        description: Whether or not there are more elements available after this set. If false, this set comprises the end of the list
+    required: [type, has_more]
+  MoodList:
+    description: List of moods
+    allOf:
+      - $ref: '#/definitions/List'
+      - type: object
+        properties:
+          data:
+            type: array
+            items: {$ref: '#/definitions/Mood'}
+        required: [data]
+  ConversationList:
+    description: List of conversations
+    allOf:
+      - $ref: '#/definitions/List'
+      - type: object
+        properties:
+          data:
+            type: array
+            items: 
+              description: An array of conversations without Lines.
+              $ref: '#/definitions/ConversationWithoutLines'
+        required: [data] 
+      
