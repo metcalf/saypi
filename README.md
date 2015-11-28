@@ -126,9 +126,7 @@ Want to [help us solve these problems and much more](https://stripe.com/jobs/pos
 
 # TODOs and Qs
 * Tests for invalid params to say controller
-* Use API client to write sane tests
-* Error codes and general error handling (including custom errors from
-  middleware)
+* Use API client to write sane tests (and unmarshal errors)
 * Support rendering conversations as text instead of JSON
 * Request IDs in log lines
 * App should implement http.Handler
@@ -143,10 +141,10 @@ Want to [help us solve these problems and much more](https://stripe.com/jobs/pos
   like Greenhouse?
 * Generate public URLs for a conversation (maybe have auth package
   support returning a public version of any url?)
-* What about user errors implementing a "type" that clients can unmarshal?
 * frontend interface, Go as a static fileserver, JS tests running against stub
 * Object creation limits
 * Write an example of refactoring list queries to use a read-replica
+* Server hosts its own Swagger API docs
 
 ## Maybe include these patterns?
 * API clients across multiple languages

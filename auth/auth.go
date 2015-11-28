@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -14,6 +13,8 @@ import (
 	"goji.io"
 
 	"github.com/metcalf/saypi/log"
+	"github.com/metcalf/saypi/respond"
+	"github.com/metcalf/saypi/usererrors"
 	"golang.org/x/net/context"
 )
 
@@ -55,10 +56,7 @@ func (c *Controller) CreateUser(ctx context.Context, w http.ResponseWriter, r *h
 		ID string `json:"id"`
 	}{base64.URLEncoding.EncodeToString(msg)}
 
-	if err := json.NewEncoder(w).Encode(res); err != nil {
-		// TODO: This shouldn't panic but handle some errors
-		panic(err)
-	}
+	respond.Data(w, http.StatusOK, res)
 }
 
 func (c *Controller) GetUser(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -70,7 +68,7 @@ func (c *Controller) GetUser(ctx context.Context, w http.ResponseWriter, r *http
 	if c.getUser(id) != nil {
 		w.WriteHeader(204)
 	} else {
-		http.NotFound(w, r)
+		respond.NotFound(w, r)
 	}
 }
 
@@ -79,7 +77,7 @@ func (c *Controller) WrapC(inner goji.Handler) goji.Handler {
 	return goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
-			http.Error(w, "You must provide a Bearer token in an Authorization header", http.StatusUnauthorized)
+			respond.Error(w, http.StatusUnauthorized, usererrors.AuthRequired)
 			return
 		}
 
@@ -90,7 +88,7 @@ func (c *Controller) WrapC(inner goji.Handler) goji.Handler {
 			log.SetContext(ctx, "user_id", user.ID)
 			inner.ServeHTTPC(ctx, w, r)
 		} else {
-			http.Error(w, "Invalid authentication string", http.StatusUnauthorized)
+			respond.Error(w, http.StatusUnauthorized, usererrors.AuthInvalid)
 		}
 	})
 }

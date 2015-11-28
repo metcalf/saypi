@@ -108,8 +108,7 @@ func TestAppBuiltinMoods(t *testing.T) {
 	rr = httptest.NewRecorder()
 	a.Srv.ServeHTTP(rr, req)
 
-	// TODO: Attempting to update a builtin should return a sensible error
-	if err := assertStatus(t, rr, http.StatusInternalServerError); err != nil {
+	if err := assertStatus(t, rr, http.StatusBadRequest); err != nil {
 		t.Error(err)
 	}
 
@@ -117,8 +116,7 @@ func TestAppBuiltinMoods(t *testing.T) {
 	rr = httptest.NewRecorder()
 	a.Srv.ServeHTTP(rr, req)
 
-	// TODO: Attempting to delete a builtin should return a sensible error
-	if err := assertStatus(t, rr, http.StatusInternalServerError); err != nil {
+	if err := assertStatus(t, rr, http.StatusBadRequest); err != nil {
 		t.Error(err)
 	}
 }
@@ -439,11 +437,6 @@ func TestConversation(t *testing.T) {
 	if err := assertStatus(t, rr, http.StatusNotFound); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func TestListing(t *testing.T) {
-	// TODO: Test listing with before, after and limits
-	// including a mix of builtin and user-created moods
 }
 
 func newRequest(t *testing.T, method, path string, form url.Values) *http.Request {

@@ -108,8 +108,8 @@ WHERE
 `
 )
 
-// TODO: Return a user-facing error when the cursor is invalid
 var errCursorNotFound = errors.New("Invalid cursor")
+var errBuiltinMood = errors.New("Cannot modify built-in moods")
 
 type repository struct {
 	db      *sqlx.DB
@@ -195,7 +195,6 @@ func (r *repository) Close() error {
 	return nil
 }
 
-// TODO: Handle cases with builtin moods before/after
 func (r *repository) ListMoods(userID string, args listArgs) ([]Mood, bool, error) {
 	sources := make([]func(bool, listArgs) ([]Mood, bool, error), 2)
 
@@ -359,7 +358,7 @@ func (r *repository) GetMood(userID, name string) (*Mood, error) {
 
 func (r *repository) SetMood(userID string, mood *Mood) error {
 	if isBuiltin(mood.Name) {
-		return errors.New("Cannot update built-in moods")
+		return errBuiltinMood
 	}
 
 	var id int
@@ -382,7 +381,7 @@ func (r *repository) SetMood(userID string, mood *Mood) error {
 
 func (r *repository) DeleteMood(userID, name string) error {
 	if isBuiltin(name) {
-		return errors.New("Cannot delete built-in moods")
+		return errBuiltinMood
 	}
 
 	// TODO: test handling error trying to delete a mood with associated lines

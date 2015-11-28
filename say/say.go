@@ -1,20 +1,19 @@
 package say
 
 import (
-	"encoding/json"
-	"errors"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-	"syscall"
 	"unicode/utf8"
 
 	"goji.io/pat"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/metcalf/saypi/auth"
-	"github.com/metcalf/saypi/log"
+	"github.com/metcalf/saypi/respond"
+	"github.com/metcalf/saypi/usererrors"
 
 	"golang.org/x/net/context"
 )
@@ -104,25 +103,27 @@ func (c *Controller) GetAnimals(w http.ResponseWriter, r *http.Request) {
 	}
 	res := getAnimalsRes{animals}
 
-	respond(w, res)
+	respond.Data(w, http.StatusOK, res)
 }
 
 func (c *Controller) ListMoods(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
 
-	lArgs, err := getListArgs(r)
-	if err != nil {
-		// TODO: Potentially unsafe use of error string
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	lArgs, uerr := getListArgs(r)
+	if uerr != nil {
+		respond.Error(w, http.StatusBadRequest, uerr)
 		return
 	}
 
 	moods, hasMore, err := c.repo.ListMoods(userID, lArgs)
-	if err != nil {
+	if err == errCursorNotFound {
+		respondCursorNotFound(w, lArgs)
+		return
+	} else if err != nil {
 		panic(err)
 	}
 
-	respond(w, listRes{
+	respond.Data(w, http.StatusOK, listRes{
 		HasMore: hasMore,
 		Type:    "mood",
 		Data:    moods,
@@ -138,25 +139,38 @@ func (c *Controller) GetMood(ctx context.Context, w http.ResponseWriter, r *http
 		panic(err)
 	}
 	if res == nil {
-		http.NotFound(w, r)
+		respond.NotFound(w, r)
 		return
 	}
 
-	respond(w, res)
+	respond.Data(w, http.StatusOK, res)
 }
 
 func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
 	name := pat.Param(ctx, "mood")
 
+	var uerr usererrors.InvalidParams
+
 	eyes := r.PostFormValue("eyes")
 	if !(eyes == "" || utf8.RuneCountInString(eyes) == 2) {
-		http.Error(w, "eyes must be a string containing two characters", http.StatusBadRequest)
+		uerr = append(uerr, usererrors.InvalidParams{{
+			Params:  []string{"eyes"},
+			Message: "must be a string containing two characters",
+		}}[0])
 	}
 
 	tongue := r.PostFormValue("tongue")
 	if !(tongue == "" || utf8.RuneCountInString(tongue) == 2) {
-		http.Error(w, "tongue must be a string containing two characters", http.StatusBadRequest)
+		uerr = append(uerr, usererrors.InvalidParams{{
+			Params:  []string{"tongue"},
+			Message: "must be a string containing two characters",
+		}}[0])
+	}
+
+	if uerr != nil {
+		respond.Error(w, http.StatusBadRequest, uerr)
+		return
 	}
 
 	mood := Mood{
@@ -167,18 +181,28 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 	}
 
 	err := c.repo.SetMood(userID, &mood)
-	if err != nil {
+	if err == errBuiltinMood {
+		respond.Error(w, http.StatusBadRequest, usererrors.ActionNotAllowed{
+			Action: fmt.Sprintf("update built-in mood %s", name),
+		})
+		return
+	} else if err != nil {
 		panic(err)
 	}
 
-	respond(w, mood)
+	respond.Data(w, http.StatusOK, mood)
 }
 
 func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
 	name := pat.Param(ctx, "mood")
 
-	if err := c.repo.DeleteMood(userID, name); err != nil {
+	if err := c.repo.DeleteMood(userID, name); err == errBuiltinMood {
+		respond.Error(w, http.StatusBadRequest, usererrors.ActionNotAllowed{
+			Action: fmt.Sprintf("delete built-in mood %s", name),
+		})
+		return
+	} else if err != nil {
 		panic(err)
 	}
 
@@ -187,19 +211,21 @@ func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *h
 
 func (c *Controller) ListConversations(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
-	lArgs, err := getListArgs(r)
-	if err != nil {
-		// TODO: Potentially unsafe use of error string
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	lArgs, uerr := getListArgs(r)
+	if uerr != nil {
+		respond.Error(w, http.StatusBadRequest, uerr)
 		return
 	}
 
 	convos, hasMore, err := c.repo.ListConversations(userID, lArgs)
-	if err != nil {
+	if err == errCursorNotFound {
+		respondCursorNotFound(w, lArgs)
+		return
+	} else if err != nil {
 		panic(err)
 	}
 
-	respond(w, listRes{
+	respond.Data(w, http.StatusOK, listRes{
 		HasMore: hasMore,
 		Type:    "conversation",
 		Data:    convos,
@@ -211,8 +237,11 @@ func (c *Controller) CreateConversation(ctx context.Context, w http.ResponseWrit
 
 	heading := r.PostFormValue("heading")
 	if cnt := utf8.RuneCountInString(heading); cnt > maxHeadingLength {
-		msg := fmt.Sprintf("Param `heading` must be a string of less than %d characters", cnt)
-		http.Error(w, msg, http.StatusBadRequest)
+		respond.Error(w, http.StatusBadRequest, usererrors.InvalidParams{{
+			Params:  []string{"heading"},
+			Message: fmt.Sprintf("must be a string of less than %d characters", maxHeadingLength),
+		}})
+		return
 	}
 
 	convo, err := c.repo.NewConversation(userID, heading)
@@ -220,7 +249,7 @@ func (c *Controller) CreateConversation(ctx context.Context, w http.ResponseWrit
 		panic(err)
 	}
 
-	respond(w, convo)
+	respond.Data(w, http.StatusOK, convo)
 }
 
 func (c *Controller) GetConversation(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -232,7 +261,7 @@ func (c *Controller) GetConversation(ctx context.Context, w http.ResponseWriter,
 		panic(err)
 	}
 	if convo == nil {
-		http.NotFound(w, r)
+		respond.NotFound(w, r)
 		return
 	}
 
@@ -243,7 +272,7 @@ func (c *Controller) GetConversation(ctx context.Context, w http.ResponseWriter,
 		}
 	}
 
-	respond(w, convo)
+	respond.Data(w, http.StatusOK, convo)
 }
 
 func (c *Controller) DeleteConversation(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -261,6 +290,8 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 	userID := mustUserID(ctx)
 	convoID := pat.Param(ctx, "conversation")
 
+	var uerr usererrors.InvalidParams
+
 	var think bool
 	switch r.PostFormValue("think") {
 	case "", "false":
@@ -268,9 +299,10 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 	case "true":
 		think = true
 	default:
-		msg := "Parameter think must be either 'true' or 'false'"
-		http.Error(w, msg, http.StatusBadRequest)
-		return
+		uerr = append(uerr, usererrors.InvalidParams{{
+			Params:  []string{"think"},
+			Message: "must be either 'true' or 'false'",
+		}}[0])
 	}
 
 	animal := r.PostFormValue("animal")
@@ -278,9 +310,10 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 		animal = "default"
 	}
 	if _, ok := c.cows[animal]; !ok {
-		msg := fmt.Sprintf("Invalid animal name %s", animal)
-		http.Error(w, msg, http.StatusBadRequest)
-		return
+		uerr = append(uerr, usererrors.InvalidParams{{
+			Params:  []string{"animal"},
+			Message: fmt.Sprintf("%q does not exist", animal),
+		}}[0])
 	}
 
 	// Sanitize null bytes for the database
@@ -296,8 +329,14 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 		panic(err)
 	}
 	if mood == nil {
-		msg := fmt.Sprintf("Invalid mood name %s", moodName)
-		http.Error(w, msg, http.StatusBadRequest)
+		uerr = append(uerr, usererrors.InvalidParams{{
+			Params:  []string{"mood"},
+			Message: fmt.Sprintf("%q does not exist", moodName),
+		}}[0])
+	}
+
+	if uerr != nil {
+		respond.Error(w, http.StatusBadRequest, uerr)
 		return
 	}
 
@@ -309,8 +348,10 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 		mood:     mood,
 	}
 
-	// TODO: This will panic if you just pass an invalid convo id... bad
-	if err := c.repo.InsertLine(userID, convoID, &line); err != nil {
+	if err := c.repo.InsertLine(userID, convoID, &line); err == sql.ErrNoRows {
+		// The underlying conversation does not exist
+		respond.NotFound(w, r)
+	} else if err != nil {
 		panic(err)
 	}
 
@@ -319,7 +360,7 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 		panic(err)
 	}
 
-	respond(w, line)
+	respond.Data(w, http.StatusOK, line)
 }
 
 func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -332,7 +373,7 @@ func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http
 		panic(err)
 	}
 	if line == nil {
-		http.NotFound(w, r)
+		respond.NotFound(w, r)
 		return
 	}
 
@@ -341,7 +382,7 @@ func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http
 		panic(err)
 	}
 
-	respond(w, line)
+	respond.Data(w, http.StatusOK, line)
 }
 
 func (c *Controller) DeleteLine(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -375,14 +416,17 @@ func mustUserID(ctx context.Context) string {
 	return user.ID
 }
 
-func getListArgs(r *http.Request) (listArgs, error) {
+func getListArgs(r *http.Request) (listArgs, usererrors.UserError) {
 	res := listArgs{
 		After:  r.FormValue("starting_after"),
 		Before: r.FormValue("ending_before"),
 	}
 
 	if res.After != "" && res.Before != "" {
-		return listArgs{}, errors.New("You may not pass `ending_before` if you pass `starting_after`")
+		return listArgs{}, usererrors.InvalidParams{{
+			Params:  []string{"starting_after", "ending_before"},
+			Message: "you may not provide multiple cursor parameters",
+		}}
 	}
 
 	var err error
@@ -392,20 +436,26 @@ func getListArgs(r *http.Request) (listArgs, error) {
 	} else {
 		res.Limit, err = strconv.Atoi(limitStr)
 		if err != nil || res.Limit < 0 || res.Limit > maxListLimit {
-			msg := fmt.Sprintf("limit must be a positive integer less than %d", maxListLimit)
-			return listArgs{}, errors.New(msg)
+			return listArgs{}, usererrors.InvalidParams{{
+				Params:  []string{"limit"},
+				Message: fmt.Sprintf("must be a positive integer less than %d", maxListLimit),
+			}}
 		}
 	}
 
 	return res, nil
 }
 
-func respond(w http.ResponseWriter, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-
-	if err := json.NewEncoder(w).Encode(data); err == syscall.EPIPE {
-		log.Print("respond_broken_pipe", "unable to respond to client", nil)
-	} else if err != nil {
-		panic(err)
+func respondCursorNotFound(w http.ResponseWriter, args listArgs) {
+	var cursorParam string
+	if args.After == "" {
+		cursorParam = "ending_before"
+	} else {
+		cursorParam = "starting_after"
 	}
+
+	respond.Error(w, http.StatusBadRequest, usererrors.InvalidParams{{
+		Params:  []string{cursorParam},
+		Message: "must refer to an existing object",
+	}})
 }

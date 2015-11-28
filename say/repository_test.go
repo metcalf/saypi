@@ -9,11 +9,6 @@ import (
 
 const testUID = "u"
 
-// For moods specifically,
-// After/Before work when they are inside the range
-// of built-ins and of user-defined. They both cross
-// between ranges correctly.
-
 func TestListMoods(t *testing.T) {
 	tdb, db, err := dbutil.NewTestDB()
 	if err != nil {
