@@ -6,6 +6,7 @@ import (
 	stdlog "log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"goji.io"
@@ -14,10 +15,13 @@ import (
 	"github.com/juju/errors"
 	"github.com/metcalf/saypi/log"
 	"github.com/metcalf/saypi/respond"
+	"github.com/metcalf/saypi/usererrors"
 )
 
+const testContext = "with super special context"
+
 func returnErr() error {
-	return errors.New("with context")
+	return errors.New(testContext)
 }
 
 func TestWrapPanic(t *testing.T) {
@@ -49,8 +53,6 @@ func TestWrapPanic(t *testing.T) {
 	if err := assertStatus(t, rr, http.StatusNoContent); err != nil {
 		t.Error(err)
 	}
-	t.Log(rr.Body)
-	t.Log(buf.String())
 
 	buf.Reset()
 	rr = httptest.NewRecorder()
@@ -60,7 +62,21 @@ func TestWrapPanic(t *testing.T) {
 	if err := assertStatus(t, rr, http.StatusInternalServerError); err != nil {
 		t.Error(err)
 	}
-	t.Log(rr.Body)
+
+	uerr, err := usererrors.DecodeJSON(rr.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	interr, ok := uerr.(usererrors.InternalFailure)
+	if !ok {
+		t.Errorf("expected an InternalFailure but got %#v", uerr)
+	}
+
+	if !strings.Contains(buf.String(), interr.ID) {
+		t.Errorf("error ID %q not present logs %s", interr.ID, buf.String())
+	}
+
 	t.Log(buf.String())
 
 	buf.Reset()
@@ -71,7 +87,11 @@ func TestWrapPanic(t *testing.T) {
 	if err := assertStatus(t, rr, http.StatusInternalServerError); err != nil {
 		t.Error(err)
 	}
-	t.Log(rr.Body)
+
+	if !strings.Contains(buf.String(), testContext) {
+		t.Errorf("error context %q not present in logs %s", testContext, buf.String())
+	}
+
 	t.Log(buf.String())
 }
 

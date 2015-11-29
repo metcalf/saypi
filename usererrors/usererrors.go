@@ -1,14 +1,21 @@
 package usererrors
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
 
 type ErrCode string
 
+// TODO: Do these even need to be public or do types represent
+// the same thing? Maybe the constant errors at the bottom
+// should be instantiated in the packages that use them
+// with these exported codes?
 const (
+	ErrUnknown          ErrCode = ""
 	ErrInvalidParams    ErrCode = "invalid_params"
 	ErrNotFound         ErrCode = "not_found"
 	ErrAuthRequired     ErrCode = "auth_required"
@@ -19,19 +26,10 @@ const (
 
 // UserError represents an error that can be returned to the client.
 // UserErrors should be instantiated at the package-level with
-// constant error strings. If you need to communicate dynamic information
-// with the error string, use an ExtendedError to encode the dynamic
-// information in a machine-readable form.
+// constant error strings.
 type UserError interface {
 	error
 	Code() ErrCode
-}
-
-// ExtendedError represents a UserError with extra, machine-readable
-// data that can be returned to the client.
-type ExtendedError interface {
-	UserError
-	Data() interface{}
 }
 
 type userError struct {
@@ -41,6 +39,47 @@ type userError struct {
 
 func (e userError) Code() ErrCode { return e.code }
 func (e userError) Error() string { return e.message }
+
+func DecodeJSON(body io.Reader) (UserError, error) {
+	var outer struct {
+		Code  ErrCode         `json:"code"`
+		Error string          `json:"error"`
+		Data  json.RawMessage `json:"data"`
+	}
+
+	if err := json.NewDecoder(body).Decode(&outer); err != nil {
+		return nil, err
+	}
+
+	switch outer.Code {
+	case ErrInvalidParams:
+		var uerr InvalidParams
+		if err := json.Unmarshal(outer.Data, &uerr); err != nil {
+			return nil, err
+		}
+		return uerr, nil
+	case ErrInternalFailure:
+		var uerr InternalFailure
+		if err := json.Unmarshal(outer.Data, &uerr); err != nil {
+			return nil, err
+		}
+		return uerr, nil
+	case ErrActionNotAllowed:
+		var uerr ActionNotAllowed
+		if err := json.Unmarshal(outer.Data, &uerr); err != nil {
+			return nil, err
+		}
+		return uerr, nil
+	case ErrNotFound:
+		return NotFound, nil
+	case ErrAuthRequired:
+		return AuthRequired, nil
+	case ErrAuthInvalid:
+		return AuthInvalid, nil
+	default:
+		return userError{ErrUnknown, outer.Error}, nil
+	}
+}
 
 // InvalidParams represents a list of parameter validation
 // errors. Each element in the list contains an explanation of the
@@ -66,9 +105,6 @@ func (e InvalidParams) Error() string {
 	return strings.Join(pms, " ")
 }
 
-// Data returns the value itself.
-func (e InvalidParams) Data() interface{} { return e }
-
 // InternalFailure represents a prviate error with
 // a unique identifier that can be referenced in private application logs.
 type InternalFailure struct {
@@ -80,9 +116,6 @@ func (e InternalFailure) Code() ErrCode { return ErrInternalFailure }
 
 // Error returns a generic internal error message
 func (e InternalFailure) Error() string { return http.StatusText(http.StatusInternalServerError) }
-
-// Data returns the value itself.
-func (e InternalFailure) Data() interface{} { return e }
 
 // ActionNotAllowed represents an ErrActionNotAllowed containing
 // a description of the action that is not permitted.
@@ -97,9 +130,6 @@ func (e ActionNotAllowed) Code() ErrCode { return ErrActionNotAllowed }
 func (e ActionNotAllowed) Error() string {
 	return fmt.Sprintf("you may not %s", e.Action)
 }
-
-// Data returns the value itself.
-func (e ActionNotAllowed) Data() interface{} { return e }
 
 // NotFound is an error of code ErrNotFound indicating that
 // the requested resource could not be found.

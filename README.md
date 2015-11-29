@@ -130,6 +130,7 @@ Want to [help us solve these problems and much more](https://stripe.com/jobs/pos
 * Support rendering conversations as text instead of JSON
 * Request IDs in log lines
 * App should implement http.Handler
+* 404 on missing deletions
 
 ## Boring TODO
 * Package descriptions

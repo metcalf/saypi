@@ -3,10 +3,10 @@ package respond
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
+	"reflect"
 	"runtime"
 	"sync"
 	"syscall"
@@ -15,6 +15,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/juju/errors"
+	"github.com/metcalf/saypi/log"
 	"github.com/metcalf/saypi/metrics"
 	"github.com/metcalf/saypi/usererrors"
 )
@@ -48,8 +49,8 @@ func Data(w http.ResponseWriter, status int, data interface{}) {
 }
 
 // Error returns a JSON response for the provided UserError and HTTP
-// status code. If the provided err implements ExtendedError, the
-// value of Data is included as well.
+// status code. If the provided err is an array, map, slice or struct
+// it is marshalled into the `data` field.
 func Error(w http.ResponseWriter, status int, err usererrors.UserError) {
 	content := struct {
 		Code  usererrors.ErrCode `json:"code"`
@@ -57,9 +58,9 @@ func Error(w http.ResponseWriter, status int, err usererrors.UserError) {
 		Data  interface{}        `json:"data,omitempty"`
 	}{err.Code(), err.Error(), nil}
 
-	datable, ok := err.(usererrors.ExtendedError)
-	if ok {
-		content.Data = datable.Data()
+	switch reflect.Indirect(reflect.ValueOf(err)).Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.Struct:
+		content.Data = err
 	}
 
 	Data(w, status, content)
@@ -88,10 +89,10 @@ func WrapPanicC(h goji.Handler) goji.Handler {
 			pc, file, line, ok := runtime.Caller(3)
 			if ok {
 				f := runtime.FuncForPC(pc)
-				lines = append(lines, fmt.Sprintf("panic at %s:%d %s()\n", file, line, f.Name()))
+				lines = append(lines, fmt.Sprintf("%s:%d %s()", file, line, f.Name()))
 			}
 
-			if wrapped, ok := err.(errors.Err); ok {
+			if wrapped, ok := err.(*errors.Err); ok {
 				for _, line := range wrapped.StackTrace() {
 					lines = append(lines, line)
 				}
