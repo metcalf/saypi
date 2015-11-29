@@ -128,6 +128,8 @@ Want to [help us solve these problems and much more](https://stripe.com/jobs/pos
 * Use API client to write sane tests
 * Tests for invalid params to say controller
 * 404 on missing deletions
+* Generate spans in client or at least take a context for cancellation
+* Client with a much more stubbable interface (e.g. Service thing from verificator)
 
 ## Boring TODO
 * Package descriptions

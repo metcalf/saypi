@@ -1,7 +1,6 @@
 package auth_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +13,7 @@ import (
 	"github.com/metcalf/saypi/app"
 	"github.com/metcalf/saypi/apptest"
 	"github.com/metcalf/saypi/auth"
+	"github.com/metcalf/saypi/client"
 )
 
 func TestAppCreateAndGet(t *testing.T) {
@@ -25,43 +25,30 @@ func TestAppCreateAndGet(t *testing.T) {
 	}
 	defer a.Close()
 
-	req, err := http.NewRequest("POST", "/users", nil)
+	cli := client.NewForTest(a)
+
+	user, err := cli.CreateUser()
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	rr := httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("Expected status %d but got %d with body %s", http.StatusOK, rr.Code, rr.Body)
+	if user.ID == "" {
+		t.Fatal("received an empty user ID")
 	}
 
-	var res struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
-		t.Fatal(err)
-	}
-
-	testCases := map[string]int{
-		res.ID:                  http.StatusNoContent,
-		apptest.TestInvalidUser: http.StatusNotFound,
-		"notauser":              http.StatusNotFound,
+	testCases := map[string]bool{
+		user.ID:                 true,
+		apptest.TestInvalidUser: false,
+		"notauser":              false,
 	}
 
 	for id, expect := range testCases {
-		req, err = http.NewRequest("GET", fmt.Sprintf("/users/%s", id), nil)
+		actual, err := cli.UserExists(id)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("%s: %s", id, err)
 		}
 
-		rr = httptest.NewRecorder()
-		a.ServeHTTP(rr, req)
-
-		if rr.Code != expect {
-			t.Errorf("Expected retrieving user %q to return %d but got %d",
-				id, expect, rr.Code)
+		if actual != expect {
+			t.Errorf("exists=%t, expected %t", actual, expect)
 		}
 	}
 }

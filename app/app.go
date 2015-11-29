@@ -32,6 +32,13 @@ type Configuration struct {
 	UserSecret []byte // secret for generating secure user tokens
 }
 
+var Routes = struct {
+	CreateUser, GetUser *pat.Pattern
+}{
+	CreateUser: pat.Post("/users"),
+	GetUser:    pat.Get("/users/:id"),
+}
+
 // App encapsulates the handlers for the saypi API
 type App struct {
 	srv     http.Handler
@@ -96,8 +103,8 @@ func New(config *Configuration) (*App, error) {
 	privMux.HandleFuncC(pat.Delete("/conversations/:conversation/lines/:line"), sayCtrl.DeleteLine)
 
 	mainMux := goji.NewMux()
-	mainMux.HandleFuncC(pat.Post("/users"), authCtrl.CreateUser)
-	mainMux.HandleFuncC(pat.Get("/users/:id"), authCtrl.GetUser)
+	mainMux.HandleFuncC(Routes.CreateUser, authCtrl.CreateUser)
+	mainMux.HandleFuncC(Routes.GetUser, authCtrl.GetUser)
 	mainMux.HandleC(pat.New("/*"), privMux)
 
 	mainMux.UseC(reqlog.WrapC)
