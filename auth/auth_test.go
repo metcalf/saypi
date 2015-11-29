@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/metcalf/saypi/app"
+	"github.com/metcalf/saypi/apptest"
 	"github.com/metcalf/saypi/auth"
 )
 
@@ -44,9 +45,9 @@ func TestAppCreateAndGet(t *testing.T) {
 	}
 
 	testCases := map[string]int{
-		res.ID:               http.StatusNoContent,
-		auth.TestInvalidUser: http.StatusNotFound,
-		"notauser":           http.StatusNotFound,
+		res.ID:                  http.StatusNoContent,
+		apptest.TestInvalidUser: http.StatusNotFound,
+		"notauser":              http.StatusNotFound,
 	}
 
 	for id, expect := range testCases {
@@ -66,7 +67,7 @@ func TestAppCreateAndGet(t *testing.T) {
 }
 
 func TestWrapC(t *testing.T) {
-	ctrl, err := auth.New(auth.TestSecret)
+	ctrl, err := auth.New(apptest.TestSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,9 +83,9 @@ func TestWrapC(t *testing.T) {
 	ctx = context.TODO()
 
 	testCases := map[string]int{
-		"":                 http.StatusUnauthorized,
-		"invalid":          http.StatusUnauthorized,
-		auth.TestValidUser: http.StatusOK,
+		"":                    http.StatusUnauthorized,
+		"invalid":             http.StatusUnauthorized,
+		apptest.TestValidUser: http.StatusOK,
 	}
 
 	for user, expect := range testCases {

@@ -11,6 +11,7 @@ import (
 	"gopkg.in/throttled/throttled.v2/store/memstore"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/metcalf/saypi/apptest"
 	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/dbutil"
 	"github.com/metcalf/saypi/log"
@@ -117,7 +118,7 @@ func NewForTest(config *Configuration) (*App, error) {
 	var closers []io.Closer
 
 	if len(config.UserSecret) == 0 {
-		config.UserSecret = auth.TestSecret
+		config.UserSecret = apptest.TestSecret
 	}
 	if config.IPPerMinute == 0 {
 		config.IPPerMinute = 100000

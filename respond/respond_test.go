@@ -2,7 +2,6 @@ package respond_test
 
 import (
 	"bytes"
-	"fmt"
 	stdlog "log"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +12,7 @@ import (
 	"goji.io/pat"
 
 	"github.com/juju/errors"
+	"github.com/metcalf/saypi/apptest"
 	"github.com/metcalf/saypi/log"
 	"github.com/metcalf/saypi/respond"
 	"github.com/metcalf/saypi/usererrors"
@@ -50,7 +50,7 @@ func TestWrapPanic(t *testing.T) {
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
-	if err := assertStatus(t, rr, http.StatusNoContent); err != nil {
+	if err := apptest.AssertStatus(rr, http.StatusNoContent); err != nil {
 		t.Error(err)
 	}
 
@@ -59,7 +59,7 @@ func TestWrapPanic(t *testing.T) {
 	req.URL.Path = "/panic"
 	mux.ServeHTTP(rr, req)
 
-	if err := assertStatus(t, rr, http.StatusInternalServerError); err != nil {
+	if err := apptest.AssertStatus(rr, http.StatusInternalServerError); err != nil {
 		t.Error(err)
 	}
 
@@ -84,7 +84,7 @@ func TestWrapPanic(t *testing.T) {
 	req.URL.Path = "/trace"
 	mux.ServeHTTP(rr, req)
 
-	if err := assertStatus(t, rr, http.StatusInternalServerError); err != nil {
+	if err := apptest.AssertStatus(rr, http.StatusInternalServerError); err != nil {
 		t.Error(err)
 	}
 
@@ -93,11 +93,4 @@ func TestWrapPanic(t *testing.T) {
 	}
 
 	t.Log(buf.String())
-}
-
-func assertStatus(t *testing.T, rr *httptest.ResponseRecorder, want int) error {
-	if want == rr.Code {
-		return nil
-	}
-	return fmt.Errorf("Expected status %d but got %d with body %s", want, rr.Code, rr.Body)
 }

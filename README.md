@@ -63,8 +63,8 @@ problems.
 
 First, unhandled errors would bubble up the stack and panic in the
 controller. We would report the stacktrace to Sentry but it was
-difficult to debug exactly where these errors originated (e.g. which query
-caused that uniqueness violation in the database?). We like the
+difficult to debug exactly where these errors originated (e.g. which
+query caused that uniqueness violation in the database?). We like the
 approach from [Juju's errors package](https://github.com/juju/errors)
 of wrapping errors to include information such as the original
 stacktrace. For unhandled errors we can log enough context to make
@@ -80,8 +80,7 @@ error returned to the user must advertise a machine-readable error
 code and human-readable message by implementing a `UserError`
 interface. Human-readable messages can be detailed enough to make
 debugging easy while machine-readable codes provide a complete
-itemization of errors that the client should be prepared to
-handle.
+itemization of errors that the client should be prepared to handle.
 
 ## Initialization and the `main` method
 
@@ -118,29 +117,31 @@ landed on the right patterns.
   solve it in Go as our primary language for new services.
 * Testing: We tried suite-based interfaces like Gocheck and Ginkgo but
   felt like we were fighting the language. We much prefer the stdlib
-  testing interfaces but haven't figured out how much to cede to an assertion
-  library like testify.assert. For now, our rule is that anything goes as long
-  as the tests are of the form `func Test*(t *testing.T)`.
+  testing interfaces but haven't figured out how much to cede to an
+  assertion library like testify.assert. For now, our rule is that
+  anything goes as long as the tests are of the form `func Test*(t
+  *testing.T)`.
 
 Want to [help us solve these problems and much more](https://stripe.com/jobs/positions/engineer/)?
 
 # TODOs and Qs
-* Tests for invalid params to say controller
 * Use API client to write sane tests
-* Request IDs in log lines
+* Tests for invalid params to say controller
 * 404 on missing deletions
+* Request IDs in log lines (and probably undo log data crap)
 
 ## Boring TODO
 * Package descriptions
 * Dependency management (vendor experiment?)
 
 ## Maybe TODO
+* frontend interface, Go as a static fileserver, JS tests running
+  against stub
 * Use 201 created with Location header to force generating internal
   URLs? Return next/prev URLs for pagination in the Location header
   like Greenhouse?
 * Generate public URLs for a conversation (maybe have auth package
   support returning a public version of any url?)
-* frontend interface, Go as a static fileserver, JS tests running against stub
 * Object creation limits
 * Write an example of refactoring list queries to use a read-replica
 * Server hosts its own Swagger API docs
@@ -148,6 +149,5 @@ Want to [help us solve these problems and much more](https://stripe.com/jobs/pos
 
 ## Maybe include these patterns?
 * API clients across multiple languages
-* Testing (pretty minimal... just use stdlib)
 * DI?
-* Dependency management?
+* Dependency management? It's just being angry about Godep...

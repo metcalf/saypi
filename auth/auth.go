@@ -22,17 +22,9 @@ type Controller struct {
 	secret []byte
 }
 
-// TODO: I don't really want these values polluting the pulic interface.
-var TestSecret = []byte("shhh")
-
 const (
 	idLen  = 16
 	ctxKey = "auth.User"
-
-	// TODO: I don't really want these values polluting the pulic interface.
-	TestValidUser = "DUtRr7IlHC-fd2wH8tfX_iLM8p8-3yeF4MTbc89B1lt41mk17sOlb6sg3JF_z6Sv"
-	// This should be the same length as the validUser so it parses the same way
-	TestInvalidUser = "ABCDr7IlHC-fd2wH8tfX_iLM8p8-3yeF4MTbc89B1lt41mk17sOlb6sg3JF_z6Sv"
 )
 
 func New(secret []byte) (*Controller, error) {
