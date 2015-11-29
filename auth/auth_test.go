@@ -30,7 +30,7 @@ func TestAppCreateAndGet(t *testing.T) {
 	}
 
 	rr := httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("Expected status %d but got %d with body %s", http.StatusOK, rr.Code, rr.Body)
@@ -56,7 +56,7 @@ func TestAppCreateAndGet(t *testing.T) {
 		}
 
 		rr = httptest.NewRecorder()
-		a.Srv.ServeHTTP(rr, req)
+		a.ServeHTTP(rr, req)
 
 		if rr.Code != expect {
 			t.Errorf("Expected retrieving user %q to return %d but got %d",

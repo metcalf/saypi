@@ -126,10 +126,8 @@ Want to [help us solve these problems and much more](https://stripe.com/jobs/pos
 
 # TODOs and Qs
 * Tests for invalid params to say controller
-* Use API client to write sane tests (and unmarshal errors)
-* Support rendering conversations as text instead of JSON
+* Use API client to write sane tests
 * Request IDs in log lines
-* App should implement http.Handler
 * 404 on missing deletions
 
 ## Boring TODO
@@ -146,6 +144,7 @@ Want to [help us solve these problems and much more](https://stripe.com/jobs/pos
 * Object creation limits
 * Write an example of refactoring list queries to use a read-replica
 * Server hosts its own Swagger API docs
+* Support rendering conversations as text instead of JSON?
 
 ## Maybe include these patterns?
 * API clients across multiple languages

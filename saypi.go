@@ -48,7 +48,7 @@ func main() {
 	})
 	log.Print("app_start", "Starting", map[string]interface{}{"address": listener.Addr()})
 	bind.Ready()
-	err = graceful.Serve(listener, a.Srv)
+	err = graceful.Serve(listener, a)
 	if err != nil {
 		log.Fatal("fatal_error", "Shutting down after a fatal error",
 			map[string]interface{}{"error": err})

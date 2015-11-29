@@ -33,13 +33,17 @@ type Configuration struct {
 
 // App encapsulates the handlers for the saypi API
 type App struct {
-	Srv     http.Handler
+	srv     http.Handler
 	closers []io.Closer
 }
 
 // Close cleans up any resources used by the app such as database connections.
 func (a *App) Close() error {
 	return closeAll(a.closers)
+}
+
+func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	a.srv.ServeHTTP(w, r)
 }
 
 // New creates an App for the given configuration.
@@ -100,7 +104,7 @@ func New(config *Configuration) (*App, error) {
 	mainMux.UseC(metrics.WrapC)
 	mainMux.Use(ipLimiter.RateLimit)
 
-	app.Srv = mainMux
+	app.srv = mainMux
 
 	return &app, nil
 }

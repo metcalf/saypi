@@ -31,7 +31,7 @@ func TestAppGetAnimals(t *testing.T) {
 	}
 
 	rr := httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusUnauthorized); err != nil {
 		t.Error(err)
@@ -40,7 +40,7 @@ func TestAppGetAnimals(t *testing.T) {
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", auth.TestValidUser))
 
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Error(err)
@@ -69,7 +69,7 @@ func TestAppBuiltinMoods(t *testing.T) {
 
 	req := newRequest(t, "GET", "/moods", nil)
 	rr := httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -87,7 +87,7 @@ func TestAppBuiltinMoods(t *testing.T) {
 
 	req = newRequest(t, "GET", "/moods/borg", nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestAppBuiltinMoods(t *testing.T) {
 
 	req = newRequest(t, "PUT", "/moods/borg", url.Values{"eyes": {"--"}})
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusBadRequest); err != nil {
 		t.Error(err)
@@ -114,7 +114,7 @@ func TestAppBuiltinMoods(t *testing.T) {
 
 	req = newRequest(t, "DELETE", "/moods/borg", nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusBadRequest); err != nil {
 		t.Error(err)
@@ -133,7 +133,7 @@ func TestAppMoods(t *testing.T) {
 	// Get a non-existent mood
 	req := newRequest(t, "GET", "/moods/cross", nil)
 	rr := httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusNotFound); err != nil {
 		t.Error(err)
@@ -147,7 +147,7 @@ func TestAppMoods(t *testing.T) {
 		"tongue": {expect.Tongue},
 	})
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -164,7 +164,7 @@ func TestAppMoods(t *testing.T) {
 	// Get created mood
 	req = newRequest(t, "GET", "/moods/cross", nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -180,7 +180,7 @@ func TestAppMoods(t *testing.T) {
 	// List including created mood
 	req = newRequest(t, "GET", "/moods", nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestAppMoods(t *testing.T) {
 		"eyes": {"<>"},
 	})
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -217,7 +217,7 @@ func TestAppMoods(t *testing.T) {
 	// Delete
 	req = newRequest(t, "DELETE", "/moods/cross", nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusNoContent); err != nil {
 		t.Fatal(err)
@@ -225,7 +225,7 @@ func TestAppMoods(t *testing.T) {
 
 	req = newRequest(t, "GET", "/moods/cross", nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusNotFound); err != nil {
 		t.Error(err)
@@ -245,7 +245,7 @@ func TestConversation(t *testing.T) {
 	heading := "top of the world"
 	req := newRequest(t, "POST", "/conversations", url.Values{"heading": {heading}})
 	rr := httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -267,7 +267,7 @@ func TestConversation(t *testing.T) {
 	// GET with no lines
 	req = newRequest(t, "GET", convoPath, nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -287,7 +287,7 @@ func TestConversation(t *testing.T) {
 		"text":   {"hi there"},
 	})
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -304,7 +304,7 @@ func TestConversation(t *testing.T) {
 		"tongue": {"<>"},
 	})
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +315,7 @@ func TestConversation(t *testing.T) {
 		"text":  {"simmer down now"},
 	})
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -332,7 +332,7 @@ func TestConversation(t *testing.T) {
 		path := fmt.Sprintf("%s/lines/%s", convoPath, line.ID)
 		req = newRequest(t, "GET", path, nil)
 		rr = httptest.NewRecorder()
-		a.Srv.ServeHTTP(rr, req)
+		a.ServeHTTP(rr, req)
 
 		if err := assertStatus(t, rr, http.StatusOK); err != nil {
 			t.Error(err)
@@ -351,7 +351,7 @@ func TestConversation(t *testing.T) {
 	// Get with lines
 	req = newRequest(t, "GET", convoPath, nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -373,7 +373,7 @@ func TestConversation(t *testing.T) {
 	// List conversations
 	req = newRequest(t, "GET", "/conversations", nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -400,7 +400,7 @@ func TestConversation(t *testing.T) {
 	path := fmt.Sprintf("%s/lines/%s", convoPath, line1.ID)
 	req = newRequest(t, "DELETE", path, nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusNoContent); err != nil {
 		t.Fatal(err)
@@ -408,7 +408,7 @@ func TestConversation(t *testing.T) {
 
 	req = newRequest(t, "GET", convoPath, nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusOK); err != nil {
 		t.Fatal(err)
@@ -424,7 +424,7 @@ func TestConversation(t *testing.T) {
 	// delete conversation
 	req = newRequest(t, "DELETE", convoPath, nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusNoContent); err != nil {
 		t.Fatal(err)
@@ -432,7 +432,7 @@ func TestConversation(t *testing.T) {
 
 	req = newRequest(t, "GET", convoPath, nil)
 	rr = httptest.NewRecorder()
-	a.Srv.ServeHTTP(rr, req)
+	a.ServeHTTP(rr, req)
 
 	if err := assertStatus(t, rr, http.StatusNotFound); err != nil {
 		t.Fatal(err)
