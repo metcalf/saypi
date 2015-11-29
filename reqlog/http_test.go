@@ -1,30 +1,32 @@
-package log_test
+package reqlog_test
 
 import (
 	"bytes"
-	stdlog "log"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/metcalf/saypi/reqlog"
+
 	"goji.io"
 
-	"github.com/metcalf/saypi/log"
 	"golang.org/x/net/context"
 )
 
 func TestWrapC(t *testing.T) {
 	var buf bytes.Buffer
-	logger := log.Logger{stdlog.New(&buf, "", 0)}
+	logger := log.New(&buf, "", 0)
+	reqlog.SetLogger(logger)
 
 	var setOK bool
 
 	bare := goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-		setOK = log.SetContext(ctx, "hey", "oh")
-		w.WriteHeader(http.StatusOK)
+		setOK = reqlog.SetContext(ctx, "hey", "oh")
+		w.Write([]byte("foo"))
 	})
-	wrapped := logger.WrapC(bare)
+	wrapped := reqlog.WrapC(bare)
 
 	req, err := http.NewRequest("FOO", "/bar", nil)
 	if err != nil {
@@ -33,8 +35,9 @@ func TestWrapC(t *testing.T) {
 
 	wrapped.ServeHTTPC(context.Background(), httptest.NewRecorder(), req)
 	logged := buf.String()
-	if !strings.Contains(logged, `http_status="200"`) {
-		t.Errorf("Expected to http_status in line %s", logged)
+	t.Log(logged)
+	if !strings.Contains(logged, `http_status=200`) {
+		t.Errorf("Expected http_status in line %s", logged)
 	}
 	if !strings.Contains(logged, `hey="oh"`) {
 		t.Errorf("Expected to say hey oh in line %s", logged)

@@ -2,12 +2,12 @@ package main
 
 import (
 	"encoding/hex"
+	"log"
 	"net"
 	"os"
 	"time"
 
 	"github.com/metcalf/saypi/app"
-	"github.com/metcalf/saypi/log"
 	"github.com/namsral/flag"
 	"github.com/zenazn/goji/bind"
 	"github.com/zenazn/goji/graceful"
@@ -24,34 +24,30 @@ type config struct {
 func main() {
 	appCfg, srvCfg, err := readConfiguration()
 	if err != nil {
-		log.Fatal("config_error", "Error parsing configuration",
-			map[string]interface{}{"error": err})
+		log.Fatalf("Error parsing configuration. event=config_error error=%q", err)
 	}
 
 	a, err := app.New(appCfg)
 	if err != nil {
-		log.Fatal("init_error", "Error initializing app",
-			map[string]interface{}{"error": err})
+		log.Fatalf("Error initializing app event=init_error error=%q", err)
 	}
 	defer a.Close()
 
 	listener, err := net.Listen("tcp", srvCfg.HTTPAddr)
 	if err != nil {
-		log.Fatal("listen_error", "Error attempting to listen on port",
-			map[string]interface{}{"error": err, "address": srvCfg.HTTPAddr})
+		log.Fatalf("Error attempting to listen on port, event=listen_error address=%q error=%q", err, srvCfg.HTTPAddr)
 	}
 
 	graceful.Timeout(httpGrace)
 	graceful.HandleSignals()
 	graceful.PreHook(func() {
-		log.Print("app_stop", "Shutting down", nil)
+		log.Print("Shutting down. event=app_stop")
 	})
-	log.Print("app_start", "Starting", map[string]interface{}{"address": listener.Addr()})
+	log.Printf("Starting. event=app_start address=%q", listener.Addr())
 	bind.Ready()
 	err = graceful.Serve(listener, a)
 	if err != nil {
-		log.Fatal("fatal_error", "Shutting down after a fatal error",
-			map[string]interface{}{"error": err})
+		log.Fatalf("Shutting down after a fatal error. event=fatal_error error=%q", err)
 	}
 }
 

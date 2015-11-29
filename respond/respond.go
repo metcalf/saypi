@@ -14,8 +14,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/juju/errors"
-	"github.com/metcalf/saypi/log"
 	"github.com/metcalf/saypi/metrics"
+	"github.com/metcalf/saypi/reqlog"
 	"github.com/metcalf/saypi/usererrors"
 )
 
@@ -35,12 +35,12 @@ func isBrokenPipe(err error) bool {
 
 // Data returns a JSON response with the provided data and HTTP status
 // code.
-func Data(w http.ResponseWriter, status int, data interface{}) {
+func Data(ctx context.Context, w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
 	if err := json.NewEncoder(w).Encode(data); isBrokenPipe(err) {
-		log.Print("respond_broken_pipe", "unable to respond to client", nil)
+		reqlog.Print(ctx, "unable to respond to client. event=respond_broken_pipe")
 		metrics.Increment("respond_broken_pipe")
 	} else if err != nil {
 		panic(err)
@@ -49,19 +49,21 @@ func Data(w http.ResponseWriter, status int, data interface{}) {
 
 // Error returns a JSON response for the provided UserError and HTTP
 // status code.
-func Error(w http.ResponseWriter, status int, uerr usererrors.UserError) {
+func Error(ctx context.Context, w http.ResponseWriter, status int, uerr usererrors.UserError) {
 	content, err := usererrors.MarshalJSON(uerr)
 	if err != nil {
 		panic(err)
 	}
 
+	reqlog.SetContext(ctx, "error_code", uerr.Code())
+
 	msg := json.RawMessage(content)
-	Data(w, status, &msg)
+	Data(ctx, w, status, &msg)
 }
 
 // NotFound returns a JSON NotFound response with a 404 status.
-func NotFound(w http.ResponseWriter, _ *http.Request) {
-	Error(w, http.StatusNotFound, usererrors.NotFound{})
+func NotFound(ctx context.Context, w http.ResponseWriter, _ *http.Request) {
+	Error(ctx, w, http.StatusNotFound, usererrors.NotFound{})
 }
 
 var logMutex sync.Mutex
@@ -81,20 +83,18 @@ func WrapPanicC(h goji.Handler) goji.Handler {
 			id := fmt.Sprintf("%016x", rand.Int63())
 			var lines []string
 
+			first := "event=panic"
 			pc, file, line, ok := runtime.Caller(3)
 			if ok {
 				f := runtime.FuncForPC(pc)
-				lines = append(lines, fmt.Sprintf("%s:%d %s()", file, line, f.Name()))
+				first = fmt.Sprintf("%s:%d %s() %s", file, line, f.Name(), first)
 			}
+			lines = append(lines, first)
 
 			if wrapped, ok := err.(*errors.Err); ok {
 				for _, line := range wrapped.StackTrace() {
 					lines = append(lines, line)
 				}
-			}
-
-			data := map[string]interface{}{
-				"PanicID": id,
 			}
 
 			if len(lines) > 1 {
@@ -103,10 +103,10 @@ func WrapPanicC(h goji.Handler) goji.Handler {
 			}
 
 			for _, line := range lines {
-				log.Print("handled_panic", line, data)
+				reqlog.Printf(ctx, "(panic=%s) %s", id, line)
 			}
 
-			Error(w, http.StatusInternalServerError, usererrors.InternalFailure{id})
+			Error(ctx, w, http.StatusInternalServerError, usererrors.InternalFailure{id})
 		}()
 		h.ServeHTTPC(ctx, w, r)
 	})

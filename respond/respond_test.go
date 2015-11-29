@@ -13,7 +13,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/metcalf/saypi/apptest"
-	"github.com/metcalf/saypi/log"
+	"github.com/metcalf/saypi/reqlog"
 	"github.com/metcalf/saypi/respond"
 	"github.com/metcalf/saypi/usererrors"
 )
@@ -26,7 +26,7 @@ func returnErr() error {
 
 func TestWrapPanic(t *testing.T) {
 	var buf bytes.Buffer
-	log.SetLogger(stdlog.New(&buf, "", 0))
+	reqlog.SetLogger(stdlog.New(&buf, "", 0))
 
 	mux := goji.NewMux()
 

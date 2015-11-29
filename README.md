@@ -128,7 +128,6 @@ Want to [help us solve these problems and much more](https://stripe.com/jobs/pos
 * Use API client to write sane tests
 * Tests for invalid params to say controller
 * 404 on missing deletions
-* Request IDs in log lines (and probably undo log data crap)
 
 ## Boring TODO
 * Package descriptions

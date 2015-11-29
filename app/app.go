@@ -14,8 +14,8 @@ import (
 	"github.com/metcalf/saypi/apptest"
 	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/dbutil"
-	"github.com/metcalf/saypi/log"
 	"github.com/metcalf/saypi/metrics"
+	"github.com/metcalf/saypi/reqlog"
 	"github.com/metcalf/saypi/respond"
 	"github.com/metcalf/saypi/say"
 )
@@ -79,7 +79,7 @@ func New(config *Configuration) (*App, error) {
 	privMux.UseC(metrics.WrapSubmuxC)
 	privMux.UseC(authCtrl.WrapC)
 
-	privMux.HandleFunc(pat.Get("/animals"), sayCtrl.GetAnimals)
+	privMux.HandleFuncC(pat.Get("/animals"), sayCtrl.GetAnimals)
 
 	privMux.HandleFuncC(pat.Get("/moods"), sayCtrl.ListMoods)
 	privMux.HandleFuncC(pat.Put("/moods/:mood"), sayCtrl.SetMood)
@@ -100,7 +100,7 @@ func New(config *Configuration) (*App, error) {
 	mainMux.HandleFuncC(pat.Get("/users/:id"), authCtrl.GetUser)
 	mainMux.HandleC(pat.New("/*"), privMux)
 
-	mainMux.UseC(log.WrapC)
+	mainMux.UseC(reqlog.WrapC)
 	mainMux.UseC(respond.WrapPanicC)
 	mainMux.UseC(metrics.WrapC)
 	mainMux.Use(ipLimiter.RateLimit)

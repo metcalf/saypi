@@ -12,7 +12,7 @@ import (
 
 	"goji.io"
 
-	"github.com/metcalf/saypi/log"
+	"github.com/metcalf/saypi/reqlog"
 	"github.com/metcalf/saypi/respond"
 	"github.com/metcalf/saypi/usererrors"
 	"golang.org/x/net/context"
@@ -48,7 +48,7 @@ func (c *Controller) CreateUser(ctx context.Context, w http.ResponseWriter, r *h
 		ID string `json:"id"`
 	}{base64.URLEncoding.EncodeToString(msg)}
 
-	respond.Data(w, http.StatusOK, res)
+	respond.Data(ctx, w, http.StatusOK, res)
 }
 
 func (c *Controller) GetUser(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -60,7 +60,7 @@ func (c *Controller) GetUser(ctx context.Context, w http.ResponseWriter, r *http
 	if c.getUser(id) != nil {
 		w.WriteHeader(204)
 	} else {
-		respond.NotFound(w, r)
+		respond.NotFound(ctx, w, r)
 	}
 }
 
@@ -69,7 +69,7 @@ func (c *Controller) WrapC(inner goji.Handler) goji.Handler {
 	return goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
-			respond.Error(w, http.StatusUnauthorized, usererrors.BearerAuthRequired{})
+			respond.Error(ctx, w, http.StatusUnauthorized, usererrors.BearerAuthRequired{})
 			return
 		}
 
@@ -77,10 +77,10 @@ func (c *Controller) WrapC(inner goji.Handler) goji.Handler {
 
 		if user := c.getUser(auth); user != nil {
 			ctx = context.WithValue(ctx, ctxKey, user)
-			log.SetContext(ctx, "user_id", user.ID)
+			reqlog.SetContext(ctx, "user_id", user.ID)
 			inner.ServeHTTPC(ctx, w, r)
 		} else {
-			respond.Error(w, http.StatusUnauthorized, usererrors.AuthInvalid{})
+			respond.Error(ctx, w, http.StatusUnauthorized, usererrors.AuthInvalid{})
 		}
 	})
 }

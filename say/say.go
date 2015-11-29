@@ -96,14 +96,14 @@ func (c *Controller) Close() error {
 	return nil
 }
 
-func (c *Controller) GetAnimals(w http.ResponseWriter, r *http.Request) {
+func (c *Controller) GetAnimals(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	animals := make([]string, 0, len(c.cows))
 	for name := range c.cows {
 		animals = append(animals, name)
 	}
 	res := getAnimalsRes{animals}
 
-	respond.Data(w, http.StatusOK, res)
+	respond.Data(ctx, w, http.StatusOK, res)
 }
 
 func (c *Controller) ListMoods(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -111,19 +111,19 @@ func (c *Controller) ListMoods(ctx context.Context, w http.ResponseWriter, r *ht
 
 	lArgs, uerr := getListArgs(r)
 	if uerr != nil {
-		respond.Error(w, http.StatusBadRequest, uerr)
+		respond.Error(ctx, w, http.StatusBadRequest, uerr)
 		return
 	}
 
 	moods, hasMore, err := c.repo.ListMoods(userID, lArgs)
 	if err == errCursorNotFound {
-		respondCursorNotFound(w, lArgs)
+		respondCursorNotFound(ctx, w, lArgs)
 		return
 	} else if err != nil {
 		panic(err)
 	}
 
-	respond.Data(w, http.StatusOK, listRes{
+	respond.Data(ctx, w, http.StatusOK, listRes{
 		HasMore: hasMore,
 		Type:    "mood",
 		Data:    moods,
@@ -139,11 +139,11 @@ func (c *Controller) GetMood(ctx context.Context, w http.ResponseWriter, r *http
 		panic(err)
 	}
 	if res == nil {
-		respond.NotFound(w, r)
+		respond.NotFound(ctx, w, r)
 		return
 	}
 
-	respond.Data(w, http.StatusOK, res)
+	respond.Data(ctx, w, http.StatusOK, res)
 }
 
 func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -169,7 +169,7 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 	}
 
 	if uerr != nil {
-		respond.Error(w, http.StatusBadRequest, uerr)
+		respond.Error(ctx, w, http.StatusBadRequest, uerr)
 		return
 	}
 
@@ -182,7 +182,7 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 
 	err := c.repo.SetMood(userID, &mood)
 	if err == errBuiltinMood {
-		respond.Error(w, http.StatusBadRequest, usererrors.ActionNotAllowed{
+		respond.Error(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
 			Action: fmt.Sprintf("update built-in mood %s", name),
 		})
 		return
@@ -190,7 +190,7 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 		panic(err)
 	}
 
-	respond.Data(w, http.StatusOK, mood)
+	respond.Data(ctx, w, http.StatusOK, mood)
 }
 
 func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -198,7 +198,7 @@ func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *h
 	name := pat.Param(ctx, "mood")
 
 	if err := c.repo.DeleteMood(userID, name); err == errBuiltinMood {
-		respond.Error(w, http.StatusBadRequest, usererrors.ActionNotAllowed{
+		respond.Error(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
 			Action: fmt.Sprintf("delete built-in mood %s", name),
 		})
 		return
@@ -213,19 +213,19 @@ func (c *Controller) ListConversations(ctx context.Context, w http.ResponseWrite
 	userID := mustUserID(ctx)
 	lArgs, uerr := getListArgs(r)
 	if uerr != nil {
-		respond.Error(w, http.StatusBadRequest, uerr)
+		respond.Error(ctx, w, http.StatusBadRequest, uerr)
 		return
 	}
 
 	convos, hasMore, err := c.repo.ListConversations(userID, lArgs)
 	if err == errCursorNotFound {
-		respondCursorNotFound(w, lArgs)
+		respondCursorNotFound(ctx, w, lArgs)
 		return
 	} else if err != nil {
 		panic(err)
 	}
 
-	respond.Data(w, http.StatusOK, listRes{
+	respond.Data(ctx, w, http.StatusOK, listRes{
 		HasMore: hasMore,
 		Type:    "conversation",
 		Data:    convos,
@@ -237,7 +237,7 @@ func (c *Controller) CreateConversation(ctx context.Context, w http.ResponseWrit
 
 	heading := r.PostFormValue("heading")
 	if cnt := utf8.RuneCountInString(heading); cnt > maxHeadingLength {
-		respond.Error(w, http.StatusBadRequest, usererrors.InvalidParams{{
+		respond.Error(ctx, w, http.StatusBadRequest, usererrors.InvalidParams{{
 			Params:  []string{"heading"},
 			Message: fmt.Sprintf("must be a string of less than %d characters", maxHeadingLength),
 		}})
@@ -249,7 +249,7 @@ func (c *Controller) CreateConversation(ctx context.Context, w http.ResponseWrit
 		panic(err)
 	}
 
-	respond.Data(w, http.StatusOK, convo)
+	respond.Data(ctx, w, http.StatusOK, convo)
 }
 
 func (c *Controller) GetConversation(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -261,7 +261,7 @@ func (c *Controller) GetConversation(ctx context.Context, w http.ResponseWriter,
 		panic(err)
 	}
 	if convo == nil {
-		respond.NotFound(w, r)
+		respond.NotFound(ctx, w, r)
 		return
 	}
 
@@ -272,7 +272,7 @@ func (c *Controller) GetConversation(ctx context.Context, w http.ResponseWriter,
 		}
 	}
 
-	respond.Data(w, http.StatusOK, convo)
+	respond.Data(ctx, w, http.StatusOK, convo)
 }
 
 func (c *Controller) DeleteConversation(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -336,7 +336,7 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 	}
 
 	if uerr != nil {
-		respond.Error(w, http.StatusBadRequest, uerr)
+		respond.Error(ctx, w, http.StatusBadRequest, uerr)
 		return
 	}
 
@@ -350,7 +350,7 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 
 	if err := c.repo.InsertLine(userID, convoID, &line); err == sql.ErrNoRows {
 		// The underlying conversation does not exist
-		respond.NotFound(w, r)
+		respond.NotFound(ctx, w, r)
 	} else if err != nil {
 		panic(err)
 	}
@@ -360,7 +360,7 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 		panic(err)
 	}
 
-	respond.Data(w, http.StatusOK, line)
+	respond.Data(ctx, w, http.StatusOK, line)
 }
 
 func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -373,7 +373,7 @@ func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http
 		panic(err)
 	}
 	if line == nil {
-		respond.NotFound(w, r)
+		respond.NotFound(ctx, w, r)
 		return
 	}
 
@@ -382,7 +382,7 @@ func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http
 		panic(err)
 	}
 
-	respond.Data(w, http.StatusOK, line)
+	respond.Data(ctx, w, http.StatusOK, line)
 }
 
 func (c *Controller) DeleteLine(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -446,7 +446,7 @@ func getListArgs(r *http.Request) (listArgs, usererrors.UserError) {
 	return res, nil
 }
 
-func respondCursorNotFound(w http.ResponseWriter, args listArgs) {
+func respondCursorNotFound(ctx context.Context, w http.ResponseWriter, args listArgs) {
 	var cursorParam string
 	if args.After == "" {
 		cursorParam = "ending_before"
@@ -454,7 +454,7 @@ func respondCursorNotFound(w http.ResponseWriter, args listArgs) {
 		cursorParam = "starting_after"
 	}
 
-	respond.Error(w, http.StatusBadRequest, usererrors.InvalidParams{{
+	respond.Error(ctx, w, http.StatusBadRequest, usererrors.InvalidParams{{
 		Params:  []string{cursorParam},
 		Message: "must refer to an existing object",
 	}})
