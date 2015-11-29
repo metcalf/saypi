@@ -18,6 +18,8 @@ func init() {
 	}
 }
 
+// MapperFunc is a custom name mapping function for sqlx.DB.MapperFunc
+// that translates camelcase to snake case and handles known acronyms.
 func MapperFunc() func(string) string {
 	return rs.Underscore
 }

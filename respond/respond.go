@@ -73,6 +73,8 @@ func NotFound(w http.ResponseWriter, _ *http.Request) {
 
 var logMutex sync.Mutex
 
+// WrapPanicC wraps a goji.Handler to catch panics, log relevant
+// information and return an InternalFailure to the user.
 func WrapPanicC(h goji.Handler) goji.Handler {
 	return goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		defer func() {
