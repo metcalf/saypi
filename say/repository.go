@@ -3,7 +3,6 @@ package say
 import (
 	"crypto/rand"
 	"database/sql"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -12,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/juju/errors"
 	"github.com/lib/pq"
 )
 
@@ -177,7 +177,7 @@ func newRepository(db *sqlx.DB) (*repository, error) {
 		prepped, err := db.PrepareNamed(sqlStr)
 		*stmt = prepped
 		if err != nil {
-			return nil, err
+			return nil, errors.Annotatef(err, "preparing statement %s", sqlStr)
 		}
 		r.closers = append(r.closers, prepped)
 	}
@@ -188,7 +188,7 @@ func newRepository(db *sqlx.DB) (*repository, error) {
 func (r *repository) Close() error {
 	for _, closer := range r.closers {
 		if err := closer.Close(); err != nil {
-			return err
+			return errors.Annotatef(err, "closing %s", closer)
 		}
 	}
 
@@ -300,7 +300,7 @@ func (r *repository) listUserMoods(userID string, asc bool, args listArgs) ([]Mo
 		if err == sql.ErrNoRows {
 			return nil, false, errCursorNotFound
 		} else if err != nil {
-			return nil, false, err
+			return nil, false, errors.Trace(err)
 		} else {
 			cursorID = mood.IntID
 		}
@@ -311,14 +311,14 @@ func (r *repository) listUserMoods(userID string, asc bool, args listArgs) ([]Mo
 		CursorID, Limit int
 	}{userID, cursorID, args.Limit + 1})
 	if err != nil {
-		return nil, false, err
+		return nil, false, errors.Trace(err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var rec moodRec
 		if err := rows.StructScan(&rec); err != nil {
-			return nil, false, err
+			return nil, false, errors.Trace(err)
 		}
 
 		rec.UserDefined = true
@@ -348,7 +348,7 @@ func (r *repository) GetMood(userID, name string) (*Mood, error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	rec.UserDefined = true
 	rec.id = rec.IntID
@@ -368,10 +368,10 @@ func (r *repository) SetMood(userID string, mood *Mood) error {
 		userID, mood.Name, mood.Eyes, mood.Tongue,
 	}).Scan(&id)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	if id == 0 {
-		return fmt.Errorf("Unable to update mood %q", mood.Name)
+		return errors.Errorf("Unable to update mood %q", mood.Name)
 	}
 
 	mood.id = id
@@ -387,7 +387,7 @@ func (r *repository) DeleteMood(userID, name string) error {
 	// TODO: test handling error trying to delete a mood with associated lines
 	_, err := r.deleteMood.Exec(struct{ UserID, Name string }{userID, name})
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	return nil
@@ -411,7 +411,7 @@ func (r *repository) ListConversations(userID string, args listArgs) ([]Conversa
 		if err == sql.ErrNoRows {
 			return nil, false, errCursorNotFound
 		} else if err != nil {
-			return nil, false, err
+			return nil, false, errors.Trace(err)
 		} else {
 			cursorID = convo.IntID
 		}
@@ -422,14 +422,14 @@ func (r *repository) ListConversations(userID string, args listArgs) ([]Conversa
 		CursorID, Limit int
 	}{userID, cursorID, args.Limit + 1})
 	if err != nil {
-		return nil, false, err
+		return nil, false, errors.Trace(err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var rec convoRec
 		if err := rows.StructScan(&rec); err != nil {
-			return nil, false, err
+			return nil, false, errors.Trace(err)
 		}
 
 		rec.id = rec.IntID
@@ -450,7 +450,7 @@ func (r *repository) NewConversation(userID, heading string) (*Conversation, err
 	for i := 0; i < maxInsertRetries; i++ {
 		rv, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
 		if err != nil {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 		publicID = convoIDPrefix + strconv.FormatUint(rv.Uint64(), 36)
 
@@ -468,7 +468,7 @@ func (r *repository) NewConversation(userID, heading string) (*Conversation, err
 
 		dbErr, ok := err.(*pq.Error)
 		if !ok || dbErr.Code != dbErrDupUnique {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 	}
 
@@ -482,12 +482,12 @@ func (r *repository) GetConversation(userID, convoID string) (*Conversation, err
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	rows, err := r.findConvoLines.Queryx(struct{ ID int }{convo.IntID})
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	defer rows.Close()
 
@@ -495,12 +495,12 @@ func (r *repository) GetConversation(userID, convoID string) (*Conversation, err
 	for rows.Next() {
 		var rec lineRec
 		if err := rows.StructScan(&rec); err != nil {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 
 		setLineMood(&rec)
 		if rec.mood == nil {
-			return nil, fmt.Errorf("Line %s does not have a valid mood", rec.ID)
+			return nil, errors.Errorf("Line %s does not have a valid mood", rec.ID)
 		}
 
 		convo.Lines = append(convo.Lines, rec.Line)
@@ -514,7 +514,7 @@ func (r *repository) GetConversation(userID, convoID string) (*Conversation, err
 func (r *repository) DeleteConversation(userID, convoID string) error {
 	_, err := r.deleteConvo.Exec(struct{ UserID, PublicID string }{userID, convoID})
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	return nil
@@ -526,13 +526,13 @@ func (r *repository) InsertLine(userID, convoID string, line *Line) error {
 	var convo convoRec
 	err := r.getConvo.Get(&convo, struct{ UserID, PublicID string }{userID, convoID})
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	for i := 0; i < maxInsertRetries; i++ {
 		rv, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 		publicID = lineIDPrefix + strconv.FormatUint(rv.Uint64(), 36)
 
@@ -560,7 +560,7 @@ func (r *repository) InsertLine(userID, convoID string, line *Line) error {
 
 		dbErr, ok := err.(*pq.Error)
 		if !ok || dbErr.Code != dbErrDupUnique {
-			return err
+			return errors.Trace(err)
 		}
 	}
 
@@ -574,12 +574,12 @@ func (r *repository) GetLine(userID, convoID, lineID string) (*Line, error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	setLineMood(&rec)
 	if rec.mood == nil {
-		return nil, fmt.Errorf("Line %s does not have a valid mood", rec.ID)
+		return nil, errors.Errorf("Line %s does not have a valid mood", rec.ID)
 	}
 
 	return &rec.Line, nil
@@ -588,7 +588,7 @@ func (r *repository) GetLine(userID, convoID, lineID string) (*Line, error) {
 func (r *repository) DeleteLine(userID, convoID, lineID string) error {
 	_, err := r.deleteLine.Exec(struct{ UserID, ConvoID, LineID string }{userID, convoID, lineID})
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	return nil

@@ -30,6 +30,11 @@ func (b codaBackend) Increment(key string) {
 
 var backend = Backend(codaBackend{})
 
+// Increment calls the Increment method on the current package-level backend.
+func Increment(key string) {
+	backend.Increment(key)
+}
+
 // WrapC wraps a handler to track request counts and response status
 // code counts namespaced by goji Pattern. It will only include
 // patterns that implemnt fmt.Stringer. For example, if a request
@@ -64,8 +69,8 @@ func WrapC(h goji.Handler) goji.Handler {
 		fullPatStr := strings.Trim(strings.Replace(path.Join(patStrs...), "/", ".", -1), ".")
 
 		if fullPatStr != "" {
-			backend.Increment(fmt.Sprintf("%s.request", fullPatStr))
-			backend.Increment(fmt.Sprintf("%s.response.%d", fullPatStr, w2.Status()))
+			Increment(fmt.Sprintf("%s.request", fullPatStr))
+			Increment(fmt.Sprintf("%s.response.%d", fullPatStr, w2.Status()))
 		}
 	})
 }

@@ -10,7 +10,7 @@ import (
 var logger Logger
 
 func init() {
-	logger = Logger{log.New(os.Stderr, "", log.LstdFlags)}
+	SetLogger(log.New(os.Stderr, "", log.LstdFlags))
 }
 
 // Print outputs in a structured format to the standard logger
@@ -21,6 +21,11 @@ func Print(event, msg string, data map[string]interface{}) {
 // Fatal is equivalent to Print followed by os.Exit(1)
 func Fatal(event, msg string, data map[string]interface{}) {
 	logger.Fatal(event, msg, data)
+}
+
+// SetLogger sets the underlying output logger
+func SetLogger(lgr *log.Logger) {
+	logger = Logger{lgr}
 }
 
 // Logger wraps a stdlib log.Logger to provide structured logging.

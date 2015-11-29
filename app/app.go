@@ -10,12 +10,12 @@ import (
 	"gopkg.in/throttled/throttled.v2"
 	"gopkg.in/throttled/throttled.v2/store/memstore"
 
-	"github.com/codahale/http-handlers/recovery"
 	"github.com/jmoiron/sqlx"
 	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/dbutil"
 	"github.com/metcalf/saypi/log"
 	"github.com/metcalf/saypi/metrics"
+	"github.com/metcalf/saypi/respond"
 	"github.com/metcalf/saypi/say"
 )
 
@@ -95,10 +95,8 @@ func New(config *Configuration) (*App, error) {
 	mainMux.HandleFuncC(pat.Get("/users/:id"), authCtrl.GetUser)
 	mainMux.HandleC(pat.New("/*"), privMux)
 
-	mainMux.Use(func(h http.Handler) http.Handler {
-		return recovery.Wrap(h, recovery.LogOnPanic)
-	})
 	mainMux.UseC(log.WrapC)
+	mainMux.UseC(respond.WrapPanicC)
 	mainMux.UseC(metrics.WrapC)
 	mainMux.Use(ipLimiter.RateLimit)
 

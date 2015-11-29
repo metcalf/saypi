@@ -2,6 +2,7 @@ package usererrors
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 )
 
@@ -68,15 +69,17 @@ func (e InvalidParams) Error() string {
 // Data returns the value itself.
 func (e InvalidParams) Data() interface{} { return e }
 
-// InternalFailure wraps an unhandled server error to include
+// InternalFailure represents a prviate error with
 // a unique identifier that can be referenced in private application logs.
 type InternalFailure struct {
-	error
 	ID string `json:"id"`
 }
 
 // Code returns ErrInternalFailure
 func (e InternalFailure) Code() ErrCode { return ErrInternalFailure }
+
+// Error returns a generic internal error message
+func (e InternalFailure) Error() string { return http.StatusText(http.StatusInternalServerError) }
 
 // Data returns the value itself.
 func (e InternalFailure) Data() interface{} { return e }
