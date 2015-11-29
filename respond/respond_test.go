@@ -63,7 +63,8 @@ func TestWrapPanic(t *testing.T) {
 		t.Error(err)
 	}
 
-	uerr, err := usererrors.DecodeJSON(rr.Body)
+	t.Log(rr.Body.String())
+	uerr, err := usererrors.UnmarshalJSON(rr.Body.Bytes())
 	if err != nil {
 		t.Fatal(err)
 	}

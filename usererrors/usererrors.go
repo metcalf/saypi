@@ -3,25 +3,9 @@ package usererrors
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"reflect"
 	"strings"
-)
-
-type ErrCode string
-
-// TODO: Do these even need to be public or do types represent
-// the same thing? Maybe the constant errors at the bottom
-// should be instantiated in the packages that use them
-// with these exported codes?
-const (
-	ErrUnknown          ErrCode = ""
-	ErrInvalidParams    ErrCode = "invalid_params"
-	ErrNotFound         ErrCode = "not_found"
-	ErrAuthRequired     ErrCode = "auth_required"
-	ErrAuthInvalid      ErrCode = "auth_invalid"
-	ErrInternalFailure  ErrCode = "internal_failure"
-	ErrActionNotAllowed ErrCode = "action_not_allowed"
 )
 
 // UserError represents an error that can be returned to the client.
@@ -29,68 +13,114 @@ const (
 // constant error strings.
 type UserError interface {
 	error
-	Code() ErrCode
+	Code() string
 }
 
 type userError struct {
-	code    ErrCode
-	message string
+	CodeF  string `json:"code"`
+	ErrorF string `json:"error"`
 }
 
-func (e userError) Code() ErrCode { return e.code }
-func (e userError) Error() string { return e.message }
+func (e userError) Code() string  { return e.CodeF }
+func (e userError) Error() string { return e.ErrorF }
 
-func DecodeJSON(body io.Reader) (UserError, error) {
-	var outer struct {
-		Code  ErrCode         `json:"code"`
-		Error string          `json:"error"`
-		Data  json.RawMessage `json:"data"`
+var registered map[string]reflect.Type
+
+func init() {
+	registered = make(map[string]reflect.Type)
+
+	Register(InvalidParams{})
+	Register(InternalFailure{})
+	Register(ActionNotAllowed{})
+	Register(NotFound{})
+	Register(BearerAuthRequired{})
+	Register(AuthInvalid{})
+}
+
+// Register associates an error code string with a concrete type
+// for unmarshalling.
+func Register(uerr UserError) error {
+	code := uerr.Code()
+	tp := reflect.TypeOf(uerr)
+
+	if existing, ok := registered[code]; ok {
+		if existing == tp {
+			// Already registered
+			return nil
+		}
+		return fmt.Errorf("error code %q is already registered to %s", code, tp)
 	}
 
-	if err := json.NewDecoder(body).Decode(&outer); err != nil {
+	registered[code] = tp
+	return nil
+}
+
+// UnmarshalJSON parses a JSON-encoded UserError.  If the code of the
+// error has been registered, the registered type is returned.
+func UnmarshalJSON(data []byte) (UserError, error) {
+	var uerr struct {
+		userError
+		Data json.RawMessage `json:"data,omitempty"`
+	}
+
+	if err := json.Unmarshal(data, &uerr); err != nil {
 		return nil, err
 	}
 
-	switch outer.Code {
-	case ErrInvalidParams:
-		var uerr InvalidParams
-		if err := json.Unmarshal(outer.Data, &uerr); err != nil {
-			return nil, err
-		}
+	tp, ok := registered[uerr.Code()]
+	if !ok {
 		return uerr, nil
-	case ErrInternalFailure:
-		var uerr InternalFailure
-		if err := json.Unmarshal(outer.Data, &uerr); err != nil {
-			return nil, err
-		}
-		return uerr, nil
-	case ErrActionNotAllowed:
-		var uerr ActionNotAllowed
-		if err := json.Unmarshal(outer.Data, &uerr); err != nil {
-			return nil, err
-		}
-		return uerr, nil
-	case ErrNotFound:
-		return NotFound, nil
-	case ErrAuthRequired:
-		return AuthRequired, nil
-	case ErrAuthInvalid:
-		return AuthInvalid, nil
-	default:
-		return userError{ErrUnknown, outer.Error}, nil
 	}
+
+	val := reflect.New(tp)
+
+	if uerr.Data != nil {
+		if err := json.Unmarshal(uerr.Data, val.Interface()); err != nil {
+			return nil, fmt.Errorf("unmarshaling error data: %s", err)
+		}
+	}
+	return val.Elem().Interface().(UserError), nil
+}
+
+// MarshalJSON encodes the UserError as JSON. If the provided value is
+// an array, map, slice or struct with at least one field it is
+// marshalled into the `data` field.
+func MarshalJSON(uerr UserError) ([]byte, error) {
+	var content struct {
+		userError
+		Data interface{} `json:"data,omitempty"`
+	}
+	content.userError = userError{uerr.Code(), uerr.Error()}
+
+	switch tp := reflect.Indirect(reflect.ValueOf(uerr)); tp.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice:
+		content.Data = uerr
+	case reflect.Struct:
+		if tp.NumField() > 0 {
+			content.Data = uerr
+		}
+	}
+
+	outer, err := json.Marshal(content)
+	if err != nil {
+		return nil, err
+	}
+	return outer, nil
+}
+
+// InvalidParamsEntry represents a single error for InvalidParams
+type InvalidParamsEntry struct {
+	Params  []string `json:"params"`
+	Message string   `json:"message"`
 }
 
 // InvalidParams represents a list of parameter validation
 // errors. Each element in the list contains an explanation of the
 // error and a list of the parameters that failed.
-type InvalidParams []struct {
-	Message string   `json:"message"`
-	Params  []string `json:"params"`
-}
+type InvalidParams []InvalidParamsEntry
 
-// Code returns ErrInvalidParams
-func (e InvalidParams) Code() ErrCode { return ErrInvalidParams }
+// Code returns "invalid_params"
+func (e InvalidParams) Code() string { return "invalid_params" }
 
 // Error returns a joined representation of parameter messages.
 // When possible, the underlying data should be used instead to
@@ -105,43 +135,70 @@ func (e InvalidParams) Error() string {
 	return strings.Join(pms, " ")
 }
 
-// InternalFailure represents a prviate error with
-// a unique identifier that can be referenced in private application logs.
+// InternalFailure represents a prviate error with a unique identifier
+// that can be referenced in private application logs.
 type InternalFailure struct {
 	ID string `json:"id"`
 }
 
-// Code returns ErrInternalFailure
-func (e InternalFailure) Code() ErrCode { return ErrInternalFailure }
+// Code returns "internal_failure"
+func (e InternalFailure) Code() string { return "internal_failure" }
 
-// Error returns a generic internal error message
-func (e InternalFailure) Error() string { return http.StatusText(http.StatusInternalServerError) }
+// Error returns a generic internal error message with the provided ID
+func (e InternalFailure) Error() string {
+	st := http.StatusText(http.StatusInternalServerError)
 
-// ActionNotAllowed represents an ErrActionNotAllowed containing
-// a description of the action that is not permitted.
+	if e.ID == "" {
+		return st
+	}
+
+	return fmt.Sprintf("%s (reference %q)", st, e.ID)
+}
+
+// ActionNotAllowed describes an action that is not permitted.
 type ActionNotAllowed struct {
 	Action string `json:"action"`
 }
 
-// Code returns ErrActionNotAllowed
-func (e ActionNotAllowed) Code() ErrCode { return ErrActionNotAllowed }
+// Code returns "action_not_allowed"
+func (e ActionNotAllowed) Code() string { return "action_not_allowed" }
 
 // Error returns a string describing the disallowed action
 func (e ActionNotAllowed) Error() string {
 	return fmt.Sprintf("you may not %s", e.Action)
 }
 
-// NotFound is an error of code ErrNotFound indicating that
-// the requested resource could not be found.
-var NotFound = userError{ErrNotFound, "the requested resource could not be found"}
+// NotFound indicates that the requested resource could not be found.
+type NotFound struct{}
 
-// AuthRequired is an error of code ErrAuthRequired indicating that
-// you must provide a Bearer token in an Authorization header.
-var AuthRequired = userError{ErrAuthRequired, "you must provide a Bearer token in an Authorization header"}
+// Code returns "not_found"
+func (e NotFound) Code() string { return "not_found" }
 
-// AuthInvalid is an error of code ErrAuthInvalid indicating that
-// the authorization you provided is invalid
-var AuthInvalid = userError{ErrAuthInvalid, "the authorization token you provided is invalid"}
+func (e NotFound) Error() string {
+	return "the requested resource could not be found"
+}
+
+// BearerAuthRequired indicates that you must provide a Bearer token
+// in the Authorization header.
+type BearerAuthRequired struct{}
+
+// Code returns "auth_required"
+func (e BearerAuthRequired) Code() string { return "bearer_auth_required" }
+
+func (e BearerAuthRequired) Error() string {
+	return "you must provide a Bearer token in the Authorization header"
+}
+
+// AuthInvalid indicates that the authorization you provided is
+// invalid.
+type AuthInvalid struct{}
+
+// Code returns "auth_invalid"
+func (e AuthInvalid) Code() string { return "auth_invalid" }
+
+func (e AuthInvalid) Error() string {
+	return "the authorization token you provided is invalid"
+}
 
 // Don't necessarily have a Cause,
 // Never need a Cause if it's a UserError?
@@ -155,15 +212,6 @@ var AuthInvalid = userError{ErrAuthInvalid, "the authorization token you provide
 // is gated in to seeing detailed decline codes before propogating the
 // result to an upper level of the stack.
 
-// Should be able to type switch in Go code and string switch in
-// parsing code.
-// Would be great if all were stringers in a similar way
-// Basically there are some things for which we want custom
-// types and others for which we really don't care and just want code+message automatically
-// Want Golang clients to be able to reify errors into original types
-// Want non-Golang clients to be able to parse machine-readable error codes (even better would be to make code-gen easy, codes as data)
-// Possible error types should be pretty obvious from package docs
-
 /*
 Examples from other apps:
 type CardDeclined struct {
@@ -171,7 +219,7 @@ type CardDeclined struct {
 	DeclineCode int
 }
 
-func (e CardDeclined) Code() ErrCode { return ErrCardDeclined }
+func (e CardDeclined) Code() errCode { return ErrCardDeclined }
 func (e CardDeclined) Error() string {
 	if e.Reason != "" {
 		return e.Reason

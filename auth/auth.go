@@ -69,7 +69,7 @@ func (c *Controller) WrapC(inner goji.Handler) goji.Handler {
 	return goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
-			respond.Error(w, http.StatusUnauthorized, usererrors.AuthRequired)
+			respond.Error(w, http.StatusUnauthorized, usererrors.BearerAuthRequired{})
 			return
 		}
 
@@ -80,7 +80,7 @@ func (c *Controller) WrapC(inner goji.Handler) goji.Handler {
 			log.SetContext(ctx, "user_id", user.ID)
 			inner.ServeHTTPC(ctx, w, r)
 		} else {
-			respond.Error(w, http.StatusUnauthorized, usererrors.AuthInvalid)
+			respond.Error(w, http.StatusUnauthorized, usererrors.AuthInvalid{})
 		}
 	})
 }

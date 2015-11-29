@@ -154,18 +154,18 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 
 	eyes := r.PostFormValue("eyes")
 	if !(eyes == "" || utf8.RuneCountInString(eyes) == 2) {
-		uerr = append(uerr, usererrors.InvalidParams{{
+		uerr = append(uerr, usererrors.InvalidParamsEntry{
 			Params:  []string{"eyes"},
 			Message: "must be a string containing two characters",
-		}}[0])
+		})
 	}
 
 	tongue := r.PostFormValue("tongue")
 	if !(tongue == "" || utf8.RuneCountInString(tongue) == 2) {
-		uerr = append(uerr, usererrors.InvalidParams{{
+		uerr = append(uerr, usererrors.InvalidParamsEntry{
 			Params:  []string{"tongue"},
 			Message: "must be a string containing two characters",
-		}}[0])
+		})
 	}
 
 	if uerr != nil {
@@ -299,10 +299,10 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 	case "true":
 		think = true
 	default:
-		uerr = append(uerr, usererrors.InvalidParams{{
+		uerr = append(uerr, usererrors.InvalidParamsEntry{
 			Params:  []string{"think"},
 			Message: "must be either 'true' or 'false'",
-		}}[0])
+		})
 	}
 
 	animal := r.PostFormValue("animal")
@@ -310,10 +310,10 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 		animal = "default"
 	}
 	if _, ok := c.cows[animal]; !ok {
-		uerr = append(uerr, usererrors.InvalidParams{{
+		uerr = append(uerr, usererrors.InvalidParamsEntry{
 			Params:  []string{"animal"},
 			Message: fmt.Sprintf("%q does not exist", animal),
-		}}[0])
+		})
 	}
 
 	// Sanitize null bytes for the database
@@ -329,10 +329,10 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 		panic(err)
 	}
 	if mood == nil {
-		uerr = append(uerr, usererrors.InvalidParams{{
+		uerr = append(uerr, usererrors.InvalidParamsEntry{
 			Params:  []string{"mood"},
 			Message: fmt.Sprintf("%q does not exist", moodName),
-		}}[0])
+		})
 	}
 
 	if uerr != nil {

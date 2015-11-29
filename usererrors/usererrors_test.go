@@ -1,33 +1,31 @@
 package usererrors_test
 
 import (
-	"bytes"
-	"net/http/httptest"
 	"reflect"
 	"testing"
 
-	"github.com/metcalf/saypi/respond"
 	"github.com/metcalf/saypi/usererrors"
 )
 
 func TestDecodeJSON(t *testing.T) {
 	testcases := []usererrors.UserError{
-		usererrors.InvalidParams{{
+		0: usererrors.InvalidParams{{
 			Params:  []string{"foo"},
 			Message: "hi there!",
 		}},
-		usererrors.InternalFailure{"myid"},
-		usererrors.ActionNotAllowed{"doit"},
-		usererrors.NotFound,
-		usererrors.AuthRequired,
-		usererrors.AuthInvalid,
+		1: usererrors.InternalFailure{"myid"},
+		2: usererrors.ActionNotAllowed{"doit"},
+		3: usererrors.NotFound{},
+		4: usererrors.BearerAuthRequired{},
+		5: usererrors.AuthInvalid{},
 	}
 
 	for i, testcase := range testcases {
-		rr := httptest.NewRecorder()
-		respond.Error(rr, 1, testcase)
+		encoded, err := usererrors.MarshalJSON(testcase)
 
-		res, err := usererrors.DecodeJSON(rr.Body)
+		t.Log(string(encoded))
+
+		res, err := usererrors.UnmarshalJSON(encoded)
 		if err != nil {
 			t.Errorf("%d: %s", i, err)
 		} else if !reflect.DeepEqual(res, testcase) {
@@ -35,18 +33,20 @@ func TestDecodeJSON(t *testing.T) {
 		}
 	}
 
-	unknownJSON := bytes.NewBufferString(`{"code":"foo","error":"bar"}`)
-	if res, err := usererrors.DecodeJSON(unknownJSON); err != nil {
+	unknownJSON := []byte(`{"code":"foo","error":"bar"}`)
+	if res, err := usererrors.UnmarshalJSON(unknownJSON); err != nil {
 		t.Error(err)
-	} else if res.Code() != usererrors.ErrUnknown {
-		t.Errorf("code=%#v, expected ErrUnknown", res.Code)
+	} else if res.Code() != "foo" {
+		t.Errorf("code=%q, expected %q", res.Code(), "foo")
 	} else if have := res.Error(); have != "bar" {
 		t.Errorf("error=%q, want %q", have, "bar")
 	}
+}
 
-	invalidJSON := bytes.NewBufferString(`{"code":"invalid_params","error":"bar"}`)
+type myErr struct {
+	Some string `json:"some"`
+}
 
-	if _, err := usererrors.DecodeJSON(invalidJSON); err == nil {
-		t.Error("expected an error decoding invalid JSON")
-	}
+func TestRegister(t *testing.T) {
+
 }

@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"reflect"
 	"runtime"
 	"sync"
 	"syscall"
@@ -49,26 +48,20 @@ func Data(w http.ResponseWriter, status int, data interface{}) {
 }
 
 // Error returns a JSON response for the provided UserError and HTTP
-// status code. If the provided err is an array, map, slice or struct
-// it is marshalled into the `data` field.
-func Error(w http.ResponseWriter, status int, err usererrors.UserError) {
-	content := struct {
-		Code  usererrors.ErrCode `json:"code"`
-		Error string             `json:"error"`
-		Data  interface{}        `json:"data,omitempty"`
-	}{err.Code(), err.Error(), nil}
-
-	switch reflect.Indirect(reflect.ValueOf(err)).Kind() {
-	case reflect.Array, reflect.Map, reflect.Slice, reflect.Struct:
-		content.Data = err
+// status code.
+func Error(w http.ResponseWriter, status int, uerr usererrors.UserError) {
+	content, err := usererrors.MarshalJSON(uerr)
+	if err != nil {
+		panic(err)
 	}
 
-	Data(w, status, content)
+	msg := json.RawMessage(content)
+	Data(w, status, &msg)
 }
 
 // NotFound returns a JSON NotFound response with a 404 status.
 func NotFound(w http.ResponseWriter, _ *http.Request) {
-	Error(w, http.StatusNotFound, usererrors.NotFound)
+	Error(w, http.StatusNotFound, usererrors.NotFound{})
 }
 
 var logMutex sync.Mutex
