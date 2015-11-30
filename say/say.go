@@ -9,7 +9,9 @@ import (
 	"unicode/utf8"
 
 	"goji.io/pat"
+	"goji.io/pattern"
 
+	"github.com/gorilla/schema"
 	"github.com/jmoiron/sqlx"
 	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/respond"
@@ -35,11 +37,17 @@ type getAnimalsRes struct {
 
 type Mood struct {
 	Name        string `json:"name"`
-	Eyes        string `json:"eyes"`
-	Tongue      string `json:"tongue"`
+	Eyes        string `json:"eyes",url:"eyes"`
+	Tongue      string `json:"tongue",url:"tongue"`
 	UserDefined bool   `json:"user_defined"`
 
 	id int
+}
+
+func (m *Mood) Vars() map[pattern.Variable]string {
+	return map[pattern.Variable]string{
+		"mood": m.Name,
+	}
 }
 
 type Line struct {
@@ -64,7 +72,16 @@ type Conversation struct {
 type listRes struct {
 	Type    string      `json:"type"`
 	HasMore bool        `json:"has_more"`
+	Cursor  string      `json:"cursor"`
 	Data    interface{} `json:"data"`
+}
+
+var decoder *schema.Decoder
+
+func init() {
+	decoder = schema.NewDecoder()
+	decoder.IgnoreUnknownKeys(true)
+	decoder.SetAliasTag("url") // For compatibility with go-querystring
 }
 
 func New(db *sqlx.DB) (*Controller, error) {
@@ -124,8 +141,9 @@ func (c *Controller) ListMoods(ctx context.Context, w http.ResponseWriter, r *ht
 	}
 
 	respond.Data(ctx, w, http.StatusOK, listRes{
-		HasMore: hasMore,
+		Cursor:  moods[len(moods)-1].Name,
 		Type:    "mood",
+		HasMore: hasMore,
 		Data:    moods,
 	})
 }
@@ -150,18 +168,22 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 	userID := mustUserID(ctx)
 	name := pat.Param(ctx, "mood")
 
-	var uerr usererrors.InvalidParams
+	var mood Mood
+	r.ParseForm()
+	err := decoder.Decode(&mood, r.PostForm)
+	if err != nil {
+		panic(err) // I believe this is unreachable
+	}
 
-	eyes := r.PostFormValue("eyes")
-	if !(eyes == "" || utf8.RuneCountInString(eyes) == 2) {
+	var uerr usererrors.InvalidParams
+	if !(mood.Eyes == "" || utf8.RuneCountInString(mood.Eyes) == 2) {
 		uerr = append(uerr, usererrors.InvalidParamsEntry{
 			Params:  []string{"eyes"},
 			Message: "must be a string containing two characters",
 		})
 	}
 
-	tongue := r.PostFormValue("tongue")
-	if !(tongue == "" || utf8.RuneCountInString(tongue) == 2) {
+	if !(mood.Tongue == "" || utf8.RuneCountInString(mood.Tongue) == 2) {
 		uerr = append(uerr, usererrors.InvalidParamsEntry{
 			Params:  []string{"tongue"},
 			Message: "must be a string containing two characters",
@@ -173,14 +195,10 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 		return
 	}
 
-	mood := Mood{
-		Name:        name,
-		Eyes:        eyes,
-		Tongue:      tongue,
-		UserDefined: true,
-	}
+	mood.Name = name
+	mood.UserDefined = true
 
-	err := c.repo.SetMood(userID, &mood)
+	err = c.repo.SetMood(userID, &mood)
 	if err == errBuiltinMood {
 		respond.Error(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
 			Action: fmt.Sprintf("update built-in mood %s", name),
@@ -226,8 +244,9 @@ func (c *Controller) ListConversations(ctx context.Context, w http.ResponseWrite
 	}
 
 	respond.Data(ctx, w, http.StatusOK, listRes{
-		HasMore: hasMore,
+		Cursor:  convos[len(convos)-1].ID,
 		Type:    "conversation",
+		HasMore: hasMore,
 		Data:    convos,
 	})
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"goji.io/pat"
+	"goji.io/pattern"
 
 	"goji.io"
 
@@ -97,6 +98,12 @@ func FromContext(ctx context.Context) (User, bool) {
 // User represents the user that authenticates.
 type User struct {
 	ID string
+}
+
+func (u *User) Vars() map[pattern.Variable]string {
+	return map[pattern.Variable]string{
+		"id": u.ID,
+	}
 }
 
 func (c *Controller) getUser(auth string) *User {

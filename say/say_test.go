@@ -13,7 +13,9 @@ import (
 
 	"github.com/metcalf/saypi/app"
 	"github.com/metcalf/saypi/apptest"
+	"github.com/metcalf/saypi/client"
 	"github.com/metcalf/saypi/say"
+	"github.com/metcalf/saypi/usererrors"
 )
 
 func TestAppGetAnimals(t *testing.T) {
@@ -25,36 +27,22 @@ func TestAppGetAnimals(t *testing.T) {
 	}
 	defer a.Close()
 
-	req, err := http.NewRequest("GET", "/animals", nil)
+	cli := client.NewForTest(a)
+
+	_, err = cli.GetAnimals()
+	if _, ok := err.(usererrors.BearerAuthRequired); !ok {
+		t.Fatalf("request was not rejected due to missing auth: %s", err)
+	}
+
+	cli.SetAuthorization(apptest.TestValidUser)
+
+	animals, err := cli.GetAnimals()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rr := httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusUnauthorized); err != nil {
-		t.Error(err)
-	}
-
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", apptest.TestValidUser))
-
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
-		t.Error(err)
-	}
-
-	var res struct {
-		Animals []string `json:"animals"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
-		t.Fatal(err)
-	}
-
-	if have, want := len(res.Animals), 46; have != want {
-		t.Fatalf("Only got %d of %d animals! %s", have, want, res.Animals)
+	if have, want := len(animals), 46; have != want {
+		t.Fatalf("Only got %d of %d animals! %s", have, want, animals)
 	}
 }
 
@@ -67,36 +55,28 @@ func TestAppBuiltinMoods(t *testing.T) {
 	}
 	defer a.Close()
 
-	req := newRequest(t, "GET", "/moods", nil)
-	rr := httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
+	cli := client.NewForTest(a)
+	cli.SetAuthorization(apptest.TestValidUser)
 
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
+	iter := cli.ListMoods(client.ListParams{})
+
+	var names []string
+	for iter.Next() {
+		names = append(names, iter.Mood().Name)
+	}
+	if err := iter.Err(); err != nil {
 		t.Fatal(err)
 	}
 
-	var listRes struct {
-		Moods []say.Mood `json:"data"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &listRes); err != nil {
-		t.Fatal(err)
-	}
-	if have, want := len(listRes.Moods), 8; have != want {
+	if have, want := len(names), 8; have != want {
 		t.Errorf("Expected %d built in moods but got %d", want, have)
 	}
 
-	req = newRequest(t, "GET", "/moods/borg", nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
+	mood, err := cli.GetMood("borg")
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	var mood say.Mood
-	if err := json.Unmarshal(rr.Body.Bytes(), &mood); err != nil {
-		t.Fatal(err)
-	}
 	if mood.Eyes != "==" {
 		t.Errorf("Borg eyes should be %q but got %q", "==", mood.Eyes)
 	}
@@ -104,20 +84,17 @@ func TestAppBuiltinMoods(t *testing.T) {
 		t.Error("Built-in moods should set UserDefined")
 	}
 
-	req = newRequest(t, "PUT", "/moods/borg", url.Values{"eyes": {"--"}})
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusBadRequest); err != nil {
-		t.Error(err)
+	err = cli.SetMood(&say.Mood{
+		Name: "borg",
+		Eyes: "--",
+	})
+	if _, ok := err.(usererrors.ActionNotAllowed); !ok {
+		t.Errorf("expected an ActionNotAllowed but got %s", err)
 	}
 
-	req = newRequest(t, "DELETE", "/moods/borg", nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusBadRequest); err != nil {
-		t.Error(err)
+	err = cli.DeleteMood("borg")
+	if _, ok := err.(usererrors.ActionNotAllowed); !ok {
+		t.Errorf("expected an ActionNotAllowed but got %s", err)
 	}
 }
 
@@ -130,47 +107,29 @@ func TestAppMoods(t *testing.T) {
 	}
 	defer a.Close()
 
-	// Get a non-existent mood
-	req := newRequest(t, "GET", "/moods/cross", nil)
-	rr := httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
+	cli := client.NewForTest(a)
+	cli.SetAuthorization(apptest.TestValidUser)
 
-	if err := apptest.AssertStatus(rr, http.StatusNotFound); err != nil {
-		t.Error(err)
+	// Get a non-existent mood
+	_, err = cli.GetMood("cross")
+	if _, ok := err.(usererrors.NotFound); !ok {
+		t.Errorf("expected NotFound for nonexistent mood but got %s", err)
 	}
 
 	// Create a mood
-	expect := say.Mood{Name: "cross", Eyes: "><", Tongue: "<>", UserDefined: true}
+	expect := &say.Mood{Name: "cross", Eyes: "><", Tongue: "<>", UserDefined: true}
 
-	req = newRequest(t, "PUT", "/moods/cross", url.Values{
-		"eyes":   {expect.Eyes},
-		"tongue": {expect.Tongue},
-	})
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
-		t.Fatal(err)
-	}
-
-	var got say.Mood
-	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+	got := &(*expect)
+	if err := cli.SetMood(got); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(expect, got) {
-		t.Errorf("Created mood %#v not equal to expected %#v", got, expect)
+		t.Errorf("created mood %#v not equal to expected %#v", got, expect)
 	}
 
 	// Get created mood
-	req = newRequest(t, "GET", "/moods/cross", nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+	got, err = cli.GetMood("cross")
+	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(expect, got) {
@@ -178,36 +137,27 @@ func TestAppMoods(t *testing.T) {
 	}
 
 	// List including created mood
-	req = newRequest(t, "GET", "/moods", nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
+	iter := cli.ListMoods(client.ListParams{})
 
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
+	var names []string
+	for iter.Next() {
+		names = append(names, iter.Mood().Name)
+	}
+	if err := iter.Err(); err != nil {
 		t.Fatal(err)
 	}
-
-	var listRes struct {
-		Moods []say.Mood `json:"data"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &listRes); err != nil {
-		t.Fatal(err)
-	}
-	if have, want := len(listRes.Moods), 9; have != want {
+	if have, want := len(names), 9; have != want {
 		t.Errorf("Expected %d moods but got %d", want, have)
 	}
 
 	// Update
-	req = newRequest(t, "PUT", "/moods/cross", url.Values{
-		"eyes": {"<>"},
-	})
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
+	got.Eyes = "<>"
+	if err := cli.SetMood(got); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+	got, err = cli.GetMood(got.Name)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Eyes != "<>" {
@@ -215,20 +165,13 @@ func TestAppMoods(t *testing.T) {
 	}
 
 	// Delete
-	req = newRequest(t, "DELETE", "/moods/cross", nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusNoContent); err != nil {
+	if err := cli.DeleteMood("cross"); err != nil {
 		t.Fatal(err)
 	}
 
-	req = newRequest(t, "GET", "/moods/cross", nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusNotFound); err != nil {
-		t.Error(err)
+	_, err = cli.GetMood("cross")
+	if _, ok := err.(usererrors.NotFound); !ok {
+		t.Errorf("expected NotFound after deleting mood but got %s", err)
 	}
 }
 
@@ -240,6 +183,9 @@ func TestConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
+
+	cli := client.NewForTest(a)
+	cli.SetAuthorization(apptest.TestValidUser)
 
 	// CREATE
 	heading := "top of the world"
@@ -299,13 +245,12 @@ func TestConversation(t *testing.T) {
 	}
 	t.Log(line1.Output)
 
-	req = newRequest(t, "PUT", "/moods/cross", url.Values{
-		"eyes":   {"><"},
-		"tongue": {"<>"},
-	})
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
+	mood := say.Mood{
+		Name:   "cross",
+		Eyes:   "><",
+		Tongue: "<>",
+	}
+	if err := cli.SetMood(&mood); err != nil {
 		t.Fatal(err)
 	}
 

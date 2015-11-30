@@ -33,10 +33,19 @@ type Configuration struct {
 }
 
 var Routes = struct {
-	CreateUser, GetUser *pat.Pattern
+	CreateUser, GetUser,
+	GetAnimals,
+	ListMoods, SetMood, GetMood, DeleteMood *pat.Pattern
 }{
 	CreateUser: pat.Post("/users"),
 	GetUser:    pat.Get("/users/:id"),
+
+	GetAnimals: pat.Get("/animals"),
+
+	ListMoods:  pat.Get("/moods"),
+	SetMood:    pat.Put("/moods/:mood"),
+	GetMood:    pat.Get("/moods/:mood"),
+	DeleteMood: pat.Delete("/moods/:mood"),
 }
 
 // App encapsulates the handlers for the saypi API
@@ -86,12 +95,12 @@ func New(config *Configuration) (*App, error) {
 	privMux.UseC(metrics.WrapSubmuxC)
 	privMux.UseC(authCtrl.WrapC)
 
-	privMux.HandleFuncC(pat.Get("/animals"), sayCtrl.GetAnimals)
+	privMux.HandleFuncC(Routes.GetAnimals, sayCtrl.GetAnimals)
 
-	privMux.HandleFuncC(pat.Get("/moods"), sayCtrl.ListMoods)
-	privMux.HandleFuncC(pat.Put("/moods/:mood"), sayCtrl.SetMood)
-	privMux.HandleFuncC(pat.Get("/moods/:mood"), sayCtrl.GetMood)
-	privMux.HandleFuncC(pat.Delete("/moods/:mood"), sayCtrl.DeleteMood)
+	privMux.HandleFuncC(Routes.ListMoods, sayCtrl.ListMoods)
+	privMux.HandleFuncC(Routes.SetMood, sayCtrl.SetMood)
+	privMux.HandleFuncC(Routes.GetMood, sayCtrl.GetMood)
+	privMux.HandleFuncC(Routes.DeleteMood, sayCtrl.DeleteMood)
 
 	privMux.HandleFuncC(pat.Get("/conversations"), sayCtrl.ListConversations)
 	privMux.HandleFuncC(pat.Post("/conversations"), sayCtrl.CreateConversation)
