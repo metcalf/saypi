@@ -242,13 +242,15 @@ func (c *Client) GetAnimals() ([]string, error) {
 	return animals.Animals, nil
 }
 
-// TODO: Needs to be able to reify things and return a value
 func (c *Client) ListMoods(params ListParams) *MoodIter {
 	return &MoodIter{c.iter(app.Routes.ListMoods, nil, params, say.Mood{})}
 }
 
 func (c *Client) SetMood(mood *say.Mood) error {
 	form, err := query.Values(mood)
+	if err != nil {
+		return err
+	}
 
 	_, err = c.execute(app.Routes.SetMood, mood, &form, mood)
 	if err != nil {
@@ -271,6 +273,84 @@ func (c *Client) GetMood(name string) (*say.Mood, error) {
 
 func (c *Client) DeleteMood(name string) error {
 	_, err := c.execute(app.Routes.DeleteMood, &say.Mood{Name: name}, nil, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) ListConversations(params ListParams) *ConversationIter {
+	return &ConversationIter{c.iter(app.Routes.ListConversations, nil, params, say.Conversation{})}
+}
+
+func (c *Client) CreateConversation(convo *say.Conversation) error {
+	form, err := query.Values(convo)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.execute(app.Routes.CreateConversation, nil, &form, convo)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) GetConversation(id string) (*say.Conversation, error) {
+	convo := say.Conversation{ID: id}
+
+	_, err := c.execute(app.Routes.GetConversation, &convo, nil, &convo)
+	if err != nil {
+		return nil, err
+	}
+
+	return &convo, nil
+}
+
+func (c *Client) DeleteConversation(id string) error {
+	_, err := c.execute(app.Routes.DeleteConversation, &say.Conversation{ID: id}, nil, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) CreateLine(convoID string, line *say.Line) error {
+	form, err := query.Values(line)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.execute(app.Routes.CreateLine, &say.Conversation{ID: convoID}, &form, line)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) GetLine(convoID, lineID string) (*say.Line, error) {
+	var line say.Line
+
+	vars := varmap((&say.Conversation{ID: convoID}).Vars())
+	vars["line"] = lineID
+
+	_, err := c.execute(app.Routes.GetLine, vars, nil, &line)
+	if err != nil {
+		return nil, err
+	}
+
+	return &line, nil
+}
+
+func (c *Client) DeleteLine(convoID, lineID string) error {
+	vars := varmap((&say.Conversation{ID: convoID}).Vars())
+	vars["line"] = lineID
+
+	_, err := c.execute(app.Routes.DeleteLine, vars, nil, nil)
 	if err != nil {
 		return err
 	}

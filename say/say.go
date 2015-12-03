@@ -36,10 +36,10 @@ type getAnimalsRes struct {
 }
 
 type Mood struct {
-	Name        string `json:"name"`
-	Eyes        string `json:"eyes",url:"eyes"`
-	Tongue      string `json:"tongue",url:"tongue"`
-	UserDefined bool   `json:"user_defined"`
+	Name        string `json:"name" url:"-"`
+	Eyes        string `json:"eyes" url:"eyes"`
+	Tongue      string `json:"tongue" url:"tongue"`
+	UserDefined bool   `json:"user_defined" url:"-"`
 
 	id int
 }
@@ -51,22 +51,28 @@ func (m *Mood) Vars() map[pattern.Variable]string {
 }
 
 type Line struct {
-	ID       string `json:"id"`
-	Animal   string `json:"animal"`
-	Think    bool   `json:"think"`
-	MoodName string `json:"mood"`
-	Text     string `json:"text"`
-	Output   string `json:"output"`
+	ID       string `json:"id" url:"-"`
+	Animal   string `json:"animal" url:"animal"`
+	Think    bool   `json:"think" url:"think"`
+	MoodName string `json:"mood" url:"mood"`
+	Text     string `json:"text" url:"text"`
+	Output   string `json:"output" url:"-"`
 
 	mood *Mood
 }
 
 type Conversation struct {
-	ID      string `json:"id"`
-	Heading string `json:"heading"`
+	ID      string `json:"id",url:"-"`
+	Heading string `json:"heading" url:"heading"`
 	Lines   []Line `json:"lines,omitempty"`
 
 	id int
+}
+
+func (c *Conversation) Vars() map[pattern.Variable]string {
+	return map[pattern.Variable]string{
+		"conversation": c.ID,
+	}
 }
 
 type listRes struct {
@@ -305,6 +311,7 @@ func (c *Controller) DeleteConversation(ctx context.Context, w http.ResponseWrit
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// TODO: use gorilla schema here
 func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
 	convoID := pat.Param(ctx, "conversation")

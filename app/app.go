@@ -35,7 +35,9 @@ type Configuration struct {
 var Routes = struct {
 	CreateUser, GetUser,
 	GetAnimals,
-	ListMoods, SetMood, GetMood, DeleteMood *pat.Pattern
+	ListMoods, SetMood, GetMood, DeleteMood,
+	ListConversations, CreateConversation, GetConversation, DeleteConversation,
+	CreateLine, GetLine, DeleteLine *pat.Pattern
 }{
 	CreateUser: pat.Post("/users"),
 	GetUser:    pat.Get("/users/:id"),
@@ -46,6 +48,15 @@ var Routes = struct {
 	SetMood:    pat.Put("/moods/:mood"),
 	GetMood:    pat.Get("/moods/:mood"),
 	DeleteMood: pat.Delete("/moods/:mood"),
+
+	ListConversations:  pat.Get("/conversations"),
+	CreateConversation: pat.Post("/conversations"),
+	GetConversation:    pat.Get("/conversations/:conversation"),
+	DeleteConversation: pat.Delete("/conversations/:conversation"),
+
+	CreateLine: pat.Post("/conversations/:conversation/lines"),
+	GetLine:    pat.Get("/conversations/:conversation/lines/:line"),
+	DeleteLine: pat.Delete("/conversations/:conversation/lines/:line"),
 }
 
 // App encapsulates the handlers for the saypi API
@@ -102,14 +113,14 @@ func New(config *Configuration) (*App, error) {
 	privMux.HandleFuncC(Routes.GetMood, sayCtrl.GetMood)
 	privMux.HandleFuncC(Routes.DeleteMood, sayCtrl.DeleteMood)
 
-	privMux.HandleFuncC(pat.Get("/conversations"), sayCtrl.ListConversations)
-	privMux.HandleFuncC(pat.Post("/conversations"), sayCtrl.CreateConversation)
-	privMux.HandleFuncC(pat.Get("/conversations/:conversation"), sayCtrl.GetConversation)
-	privMux.HandleFuncC(pat.Delete("/conversations/:conversation"), sayCtrl.DeleteConversation)
+	privMux.HandleFuncC(Routes.ListConversations, sayCtrl.ListConversations)
+	privMux.HandleFuncC(Routes.CreateConversation, sayCtrl.CreateConversation)
+	privMux.HandleFuncC(Routes.GetConversation, sayCtrl.GetConversation)
+	privMux.HandleFuncC(Routes.DeleteConversation, sayCtrl.DeleteConversation)
 
-	privMux.HandleFuncC(pat.Post("/conversations/:conversation/lines"), sayCtrl.CreateLine)
-	privMux.HandleFuncC(pat.Get("/conversations/:conversation/lines/:line"), sayCtrl.GetLine)
-	privMux.HandleFuncC(pat.Delete("/conversations/:conversation/lines/:line"), sayCtrl.DeleteLine)
+	privMux.HandleFuncC(Routes.CreateLine, sayCtrl.CreateLine)
+	privMux.HandleFuncC(Routes.GetLine, sayCtrl.GetLine)
+	privMux.HandleFuncC(Routes.DeleteLine, sayCtrl.DeleteLine)
 
 	mainMux := goji.NewMux()
 	mainMux.HandleFuncC(Routes.CreateUser, authCtrl.CreateUser)

@@ -1,14 +1,7 @@
 package say_test
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/metcalf/saypi/app"
@@ -189,58 +182,36 @@ func TestConversation(t *testing.T) {
 
 	// CREATE
 	heading := "top of the world"
-	req := newRequest(t, "POST", "/conversations", url.Values{"heading": {heading}})
-	rr := httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
+	convo := say.Conversation{Heading: heading}
 
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
+	if err := cli.CreateConversation(&convo); err != nil {
 		t.Fatal(err)
 	}
-
-	var convo say.Conversation
-	if err := json.Unmarshal(rr.Body.Bytes(), &convo); err != nil {
-		t.Fatal(err)
+	if convo.ID == "" {
+		t.Errorf("conversation ID was not set")
 	}
 	if convo.Heading != heading {
-		t.Errorf("Expected heading %q but got %q", heading, convo.Heading)
+		t.Errorf("heading=%q, expected %q", convo.Heading, heading)
 	}
 	if len(convo.Lines) != 0 {
-		t.Errorf("Unexpected lines in new conversation: %s", convo.Lines)
+		t.Errorf("unexpected lines in new conversation: %s", convo.Lines)
 	}
-
-	convoPath := fmt.Sprintf("/conversations/%s", convo.ID)
 
 	// GET with no lines
-	req = newRequest(t, "GET", convoPath, nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
+	got, err := cli.GetConversation(convo.ID)
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	var got say.Conversation
-	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(convo, got) {
-		t.Errorf("Got %#v != created %#v", got, convo)
+	if !reflect.DeepEqual(&convo, got) {
+		t.Errorf("got %#v != created %#v", got, convo)
 	}
 
 	// Add line with builtin and created mood
-	req = newRequest(t, "POST", convoPath+"/lines", url.Values{
-		"animal": {"bunny"},
-		"text":   {"hi there"},
-	})
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
-		t.Fatal(err)
+	line1 := say.Line{
+		Animal: "bunny",
+		Text:   "hi there",
 	}
-
-	var line1 say.Line
-	if err := json.Unmarshal(rr.Body.Bytes(), &line1); err != nil {
+	if err := cli.CreateLine(convo.ID, &line1); err != nil {
 		t.Fatal(err)
 	}
 	t.Log(line1.Output)
@@ -254,55 +225,30 @@ func TestConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req = newRequest(t, "POST", convoPath+"/lines", url.Values{
-		"think": {"true"},
-		"mood":  {"cross"},
-		"text":  {"simmer down now"},
-	})
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
-		t.Fatal(err)
+	line2 := say.Line{
+		Think:    true,
+		MoodName: "cross",
+		Text:     "simmer down now",
 	}
-
-	var line2 say.Line
-	if err := json.Unmarshal(rr.Body.Bytes(), &line2); err != nil {
+	if err := cli.CreateLine(convo.ID, &line2); err != nil {
 		t.Fatal(err)
 	}
 	t.Log(line2.Output)
 
 	// Get lines
 	for i, line := range []say.Line{line1, line2} {
-		path := fmt.Sprintf("%s/lines/%s", convoPath, line.ID)
-		req = newRequest(t, "GET", path, nil)
-		rr = httptest.NewRecorder()
-		a.ServeHTTP(rr, req)
-
-		if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
-			t.Error(err)
-			continue
+		got, err := cli.GetLine(convo.ID, line.ID)
+		if err != nil {
+			t.Fatalf("%d: %s", i, err)
 		}
-
-		var got say.Line
-		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(got, line) {
+		if !reflect.DeepEqual(got, &line) {
 			t.Errorf("%d: expected to get line %#v but got %#v", i, line, got)
 		}
 	}
 
 	// Get with lines
-	req = newRequest(t, "GET", convoPath, nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+	got, err = cli.GetConversation(convo.ID)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got.Lines) != 2 {
@@ -316,24 +262,19 @@ func TestConversation(t *testing.T) {
 	}
 
 	// List conversations
-	req = newRequest(t, "GET", "/conversations", nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
+	iter := cli.ListConversations(client.ListParams{})
 
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
+	iter.Next()
+	if err := iter.Err(); err != nil {
 		t.Fatal(err)
 	}
-	var listRes struct {
-		Convos []say.Conversation `json:"data"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &listRes); err != nil {
-		t.Fatal(err)
-	}
-	if have, want := len(listRes.Convos), 1; have != want {
-		t.Fatalf("Expected %d conversation but got %d", want, have)
+	curr := iter.Conversation()
+	got = &curr
+
+	if iter.Next() {
+		t.Fatalf("got multiple conversations, extra is: %s", iter.Conversation())
 	}
 
-	got = listRes.Convos[0]
 	if got.Heading != heading {
 		t.Errorf("Expected heading %s but got %s", heading, got.Heading)
 	}
@@ -342,63 +283,22 @@ func TestConversation(t *testing.T) {
 	}
 
 	// Delete line
-	path := fmt.Sprintf("%s/lines/%s", convoPath, line1.ID)
-	req = newRequest(t, "DELETE", path, nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusNoContent); err != nil {
+	if err := cli.DeleteLine(convo.ID, line1.ID); err != nil {
 		t.Fatal(err)
 	}
 
-	req = newRequest(t, "GET", convoPath, nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusOK); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
+	got, err = cli.GetConversation(convo.ID)
 	if len(got.Lines) != 1 {
 		t.Errorf("Expected 1 line but got %d", len(got.Lines))
 	}
 
 	// delete conversation
-	req = newRequest(t, "DELETE", convoPath, nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusNoContent); err != nil {
+	if err := cli.DeleteConversation(convo.ID); err != nil {
 		t.Fatal(err)
 	}
 
-	req = newRequest(t, "GET", convoPath, nil)
-	rr = httptest.NewRecorder()
-	a.ServeHTTP(rr, req)
-
-	if err := apptest.AssertStatus(rr, http.StatusNotFound); err != nil {
-		t.Fatal(err)
+	_, err = cli.GetConversation(convo.ID)
+	if _, ok := err.(usererrors.NotFound); !ok {
+		t.Fatalf("expected NotFound for deleted conversation but got %s", err)
 	}
-}
-
-func newRequest(t *testing.T, method, path string, form url.Values) *http.Request {
-	var body io.Reader
-	if form != nil {
-		body = strings.NewReader(form.Encode())
-	}
-
-	req, err := http.NewRequest(method, path, body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apptest.TestValidUser))
-
-	if method == "POST" || method == "PUT" {
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	}
-
-	return req
 }

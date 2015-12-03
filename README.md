@@ -71,16 +71,14 @@ stacktrace. For unhandled errors we can log enough context to make
 debugging possible and for well-handled errors we can log additional
 context for operators while returning a sane response to the client.
 
-The second problem was returning these sane and useful responses to
-the client. Early on, I introduced a (harmless) server-side request
-forgery vulnerability from an errant `err.Error()` return. I switched
-to returning minimal information with error responses, making my
-services harder to use. We've since settled on a pattern where any
-error returned to the user must advertise a machine-readable error
-code and human-readable message by implementing a `UserError`
-interface. Human-readable messages can be detailed enough to make
-debugging easy while machine-readable codes provide a complete
-itemization of errors that the client should be prepared to handle.
+The second problem was returning useful error responses to the client.
+Early on, I introduced a (harmless) server-side request forgery
+vulnerability from an errant `err.Error()` return. I switched to
+returning minimal information with error responses, making my services
+harder to use. We've since settled on a pattern where all errors that
+can be returned to the user are represented by a string error code
+(such as "not_found"). All error codes in turn map to a different type
+in a single package in the application.
 
 ## Initialization and the `main` method
 
@@ -125,11 +123,8 @@ landed on the right patterns.
 Want to [help us solve these problems and much more](https://stripe.com/jobs/positions/engineer/)?
 
 # TODOs and Qs
-* Use API client to write sane tests
 * Tests for invalid params to say controller
 * 404 on missing deletions
-* Generate spans in client or at least take a context for cancellation
-* Client with a much more stubbable interface (e.g. Service thing from verificator)
 
 ## Boring TODO
 * Package descriptions
@@ -147,6 +142,8 @@ Want to [help us solve these problems and much more](https://stripe.com/jobs/pos
 * Write an example of refactoring list queries to use a read-replica
 * Server hosts its own Swagger API docs
 * Support rendering conversations as text instead of JSON?
+* Generate spans in client or at least take a context for cancellation
+* Client with a much more stubbable interface (e.g. Service thing from verificator)
 
 ## Maybe include these patterns?
 * API clients across multiple languages

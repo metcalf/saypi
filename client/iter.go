@@ -30,7 +30,7 @@ type Iter struct {
 	values     reflect.Value
 	valuesType reflect.Type
 	err        error
-	cur        interface{}
+	cur        reflect.Value
 }
 
 // MoodIter is an iterator for lists of Moods. The embedded Iter
@@ -42,6 +42,19 @@ type MoodIter struct {
 // Mood returns the most recent Mood visited by a call to Next.
 func (it *MoodIter) Mood() say.Mood {
 	return it.Current().(say.Mood)
+}
+
+// ConversationIter is an iterator for lists of Conversations. The
+// embedded Iter carries methods with it; see its documentation for
+// details.
+type ConversationIter struct {
+	*Iter
+}
+
+// Conversation returns the most recent Conversation visited by a call
+// to Next.
+func (it *ConversationIter) Conversation() say.Conversation {
+	return it.Current().(say.Conversation)
 }
 
 func (it *Iter) getPage() error {
@@ -95,14 +108,14 @@ func (it *Iter) Next() bool {
 			return false
 		}
 	}
-	it.cur = it.values.Index(0).Interface()
+	it.cur = it.values.Index(0)
 	it.values = it.values.Slice(1, it.values.Len())
 	return true
 }
 
 // Current returns the most recent item visited by a call to Next.
 func (it *Iter) Current() interface{} {
-	return it.cur
+	return it.cur.Interface()
 }
 
 // Err returns the error, if any, that caused the Iter to stop. It
