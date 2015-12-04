@@ -123,7 +123,6 @@ landed on the right patterns.
 Want to [help us solve these problems and much more](https://stripe.com/jobs/positions/engineer/)?
 
 # TODOs and Qs
-* Tests for invalid params to say controller
 * 404 on missing deletions
 
 ## Boring TODO
@@ -144,6 +143,7 @@ Want to [help us solve these problems and much more](https://stripe.com/jobs/pos
 * Support rendering conversations as text instead of JSON?
 * Generate spans in client or at least take a context for cancellation
 * Client with a much more stubbable interface (e.g. Service thing from verificator)
+* Client that's more generic so we could use a single client across services
 
 ## Maybe include these patterns?
 * API clients across multiple languages

@@ -2,6 +2,8 @@ package say_test
 
 import (
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/metcalf/saypi/app"
@@ -300,5 +302,125 @@ func TestConversation(t *testing.T) {
 	_, err = cli.GetConversation(convo.ID)
 	if _, ok := err.(usererrors.NotFound); !ok {
 		t.Fatalf("expected NotFound for deleted conversation but got %s", err)
+	}
+}
+
+func TestInvalidParams(t *testing.T) {
+	cfg := &app.Configuration{}
+
+	a, err := app.NewForTest(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+
+	cli := client.NewForTest(a)
+	cli.SetAuthorization(apptest.TestValidUser)
+
+	moodTests := []struct {
+		Mood    say.Mood
+		Invalid []string
+	}{
+		{},
+		{say.Mood{Eyes: "a\x00", Tongue: "a\x00"}, []string{"eyes", "tongue"}},
+		{say.Mood{Eyes: " "}, []string{"eyes"}},
+		{say.Mood{Tongue: " "}, []string{"tongue"}},
+		{say.Mood{Eyes: "abc"}, []string{"eyes"}},
+		{say.Mood{Tongue: "abc"}, []string{"tongue"}},
+		{say.Mood{Eyes: "abc", Tongue: "abc"}, []string{"eyes", "tongue"}},
+	}
+
+	for i, test := range moodTests {
+		test.Mood.Name = strconv.Itoa(i)
+
+		err := cli.SetMood(&test.Mood)
+		if len(test.Invalid) == 0 {
+			if err != nil {
+				t.Errorf("%d: unexpected %s", i, err)
+			}
+		} else {
+			ip, ok := err.(usererrors.InvalidParams)
+			if !ok {
+				t.Errorf("%d: expected InvalidParams got %s", i, err)
+				continue
+			}
+
+			var actual []string
+			for _, p := range ip {
+				actual = append(actual, p.Params...)
+			}
+			if !reflect.DeepEqual(actual, test.Invalid) {
+				t.Errorf("%d: invalid=%s, expected %s", i, actual, test.Invalid)
+			}
+		}
+	}
+
+	conversationTests := []struct {
+		Conversation say.Conversation
+		Invalid      []string
+	}{
+		{say.Conversation{Heading: "Foo"}, nil},
+		{say.Conversation{Heading: strings.Repeat("a", 70)}, []string{"heading"}},
+		{say.Conversation{Heading: "Foo \x00"}, nil},
+	}
+
+	for i, test := range conversationTests {
+		err := cli.CreateConversation(&test.Conversation)
+		if len(test.Invalid) == 0 {
+			if err != nil {
+				t.Errorf("%d: unexpected %s", i, err)
+			}
+		} else {
+			ip, ok := err.(usererrors.InvalidParams)
+			if !ok {
+				t.Errorf("%d: expected InvalidParams got %s", i, err)
+				continue
+			}
+
+			var actual []string
+			for _, p := range ip {
+				actual = append(actual, p.Params...)
+			}
+			if !reflect.DeepEqual(actual, test.Invalid) {
+				t.Errorf("%d: invalid=%s, expected %s", i, actual, test.Invalid)
+			}
+		}
+	}
+
+	convo := say.Conversation{Heading: "Foo"}
+	if err := cli.CreateConversation(&convo); err != nil {
+		t.Fatal(err)
+	}
+
+	lineTests := []struct {
+		Line    say.Line
+		Invalid []string
+	}{
+		{},
+		{say.Line{Animal: "foo\x00", MoodName: "bar\x00", Text: "f"}, []string{"animal", "mood"}},
+		{say.Line{Text: strings.Repeat("f", 2000)}, []string{"text"}},
+	}
+
+	for i, test := range lineTests {
+		err := cli.CreateLine(convo.ID, &test.Line)
+		if len(test.Invalid) == 0 {
+			if err != nil {
+				t.Errorf("%d: unexpected %s", i, err)
+			}
+		} else {
+			ip, ok := err.(usererrors.InvalidParams)
+			if !ok {
+				t.Errorf("%d: expected InvalidParams got %s", i, err)
+				continue
+			}
+
+			var actual []string
+			for _, p := range ip {
+				actual = append(actual, p.Params...)
+			}
+			if !reflect.DeepEqual(actual, test.Invalid) {
+				t.Errorf("%d: invalid=%s, expected %s", i, actual, test.Invalid)
+			}
+		}
 	}
 }

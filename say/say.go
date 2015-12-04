@@ -24,6 +24,7 @@ const (
 	defaultListLimit = 10
 	maxListLimit     = 100
 	maxHeadingLength = 60
+	maxTextLength    = 1024
 )
 
 type Controller struct {
@@ -181,6 +182,9 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 		panic(err) // I believe this is unreachable
 	}
 
+	mood.Eyes = strings.Replace(mood.Eyes, "\x00", "", -1)
+	mood.Tongue = strings.Replace(mood.Tongue, "\x00", "", -1)
+
 	var uerr usererrors.InvalidParams
 	if !(mood.Eyes == "" || utf8.RuneCountInString(mood.Eyes) == 2) {
 		uerr = append(uerr, usererrors.InvalidParamsEntry{
@@ -260,7 +264,7 @@ func (c *Controller) ListConversations(ctx context.Context, w http.ResponseWrite
 func (c *Controller) CreateConversation(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(ctx)
 
-	heading := r.PostFormValue("heading")
+	heading := strings.Replace(r.PostFormValue("heading"), "\x00", "", -1)
 	if cnt := utf8.RuneCountInString(heading); cnt > maxHeadingLength {
 		respond.Error(ctx, w, http.StatusBadRequest, usererrors.InvalidParams{{
 			Params:  []string{"heading"},
@@ -342,10 +346,16 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 		})
 	}
 
-	// Sanitize null bytes for the database
-	moodName := strings.Replace(r.PostFormValue("mood"), "\x00", "", -1)
 	text := strings.Replace(r.PostFormValue("text"), "\x00", "", -1)
+	if cnt := utf8.RuneCountInString(text); cnt > maxTextLength {
+		respond.Error(ctx, w, http.StatusBadRequest, usererrors.InvalidParams{{
+			Params:  []string{"text"},
+			Message: fmt.Sprintf("must be a string of less than %d characters", maxTextLength),
+		}})
+		return
+	}
 
+	moodName := strings.Replace(r.PostFormValue("mood"), "\x00", "", -1)
 	if moodName == "" {
 		moodName = "default"
 	}
