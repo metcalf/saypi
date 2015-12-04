@@ -73,7 +73,8 @@ SELECT id as int_id, public_id as id, heading FROM conversations
 WHERE user_id = :user_id AND public_id = :public_id
 `
 	deleteConvo = `
-DELETE FROM conversations WHERE user_id = :user_id AND public_id = :public_id
+DELETE FROM conversations
+WHERE user_id = :user_id AND public_id = :public_id
 `
 
 	findConvoLines = `
@@ -110,6 +111,7 @@ WHERE
 
 var errCursorNotFound = errors.New("Invalid cursor")
 var errBuiltinMood = errors.New("Cannot modify built-in moods")
+var errRecordNotFound = errors.New("Requested record was not found")
 
 type repository struct {
 	db      *sqlx.DB
@@ -238,7 +240,6 @@ func (r *repository) ListMoods(userID string, args listArgs) ([]Mood, bool, erro
 	}
 
 	return moods, hasMore, nil
-
 }
 
 func (r *repository) listBuiltinMoods(asc bool, args listArgs) ([]Mood, bool, error) {
@@ -384,10 +385,8 @@ func (r *repository) DeleteMood(userID, name string) error {
 		return errBuiltinMood
 	}
 
-	// TODO: test handling error trying to delete a mood with associated lines
-	_, err := r.deleteMood.Exec(struct{ UserID, Name string }{userID, name})
-	if err != nil {
-		return errors.Trace(err)
+	if err := doDelete(r.deleteMood, struct{ UserID, Name string }{userID, name}); err != nil {
+		return err
 	}
 
 	return nil
@@ -512,9 +511,8 @@ func (r *repository) GetConversation(userID, convoID string) (*Conversation, err
 }
 
 func (r *repository) DeleteConversation(userID, convoID string) error {
-	_, err := r.deleteConvo.Exec(struct{ UserID, PublicID string }{userID, convoID})
-	if err != nil {
-		return errors.Trace(err)
+	if err := doDelete(r.deleteConvo, struct{ UserID, PublicID string }{userID, convoID}); err != nil {
+		return err
 	}
 
 	return nil
@@ -586,9 +584,8 @@ func (r *repository) GetLine(userID, convoID, lineID string) (*Line, error) {
 }
 
 func (r *repository) DeleteLine(userID, convoID, lineID string) error {
-	_, err := r.deleteLine.Exec(struct{ UserID, ConvoID, LineID string }{userID, convoID, lineID})
-	if err != nil {
-		return errors.Trace(err)
+	if err := doDelete(r.deleteLine, struct{ UserID, ConvoID, LineID string }{userID, convoID, lineID}); err != nil {
+		return err
 	}
 
 	return nil
@@ -625,4 +622,21 @@ func isBuiltin(name string) bool {
 
 func sortAsc(args listArgs) bool {
 	return args.After != "" || args.Before == ""
+}
+
+func doDelete(stmt *sqlx.NamedStmt, args interface{}) error {
+	res, err := stmt.Exec(args)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	cnt, err := res.RowsAffected()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if cnt == 0 {
+		return errRecordNotFound
+	}
+
+	return nil
 }

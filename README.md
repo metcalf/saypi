@@ -123,11 +123,11 @@ landed on the right patterns.
 Want to [help us solve these problems and much more](https://stripe.com/jobs/positions/engineer/)?
 
 # TODOs and Qs
-* 404 on missing deletions
 
 ## Boring TODO
 * Package descriptions
 * Dependency management (vendor experiment?)
+* Make this runnable with a Heroku button
 
 ## Maybe TODO
 * frontend interface, Go as a static fileserver, JS tests running

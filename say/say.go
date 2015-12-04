@@ -230,6 +230,8 @@ func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *h
 			Action: fmt.Sprintf("delete built-in mood %s", name),
 		})
 		return
+	} else if err == errRecordNotFound {
+		respond.NotFound(ctx, w, r)
 	} else if err != nil {
 		panic(err)
 	}
@@ -308,7 +310,9 @@ func (c *Controller) DeleteConversation(ctx context.Context, w http.ResponseWrit
 	userID := mustUserID(ctx)
 	convoID := pat.Param(ctx, "conversation")
 
-	if err := c.repo.DeleteConversation(userID, convoID); err != nil {
+	if err := c.repo.DeleteConversation(userID, convoID); err == errRecordNotFound {
+		respond.NotFound(ctx, w, r)
+	} else if err != nil {
 		panic(err)
 	}
 
@@ -426,7 +430,9 @@ func (c *Controller) DeleteLine(ctx context.Context, w http.ResponseWriter, r *h
 	convoID := pat.Param(ctx, "conversation")
 	lineID := pat.Param(ctx, "line")
 
-	if err := c.repo.DeleteLine(userID, convoID, lineID); err != nil {
+	if err := c.repo.DeleteLine(userID, convoID, lineID); err == errRecordNotFound {
+		respond.NotFound(ctx, w, r)
+	} else if err != nil {
 		panic(err)
 	}
 

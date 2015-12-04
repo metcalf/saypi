@@ -168,6 +168,12 @@ func TestAppMoods(t *testing.T) {
 	if _, ok := err.(usererrors.NotFound); !ok {
 		t.Errorf("expected NotFound after deleting mood but got %s", err)
 	}
+
+	err = cli.DeleteMood("cross")
+	if _, ok := err.(usererrors.NotFound); !ok {
+		t.Errorf("expected NotFound on an already deleted mood but got %s", err)
+	}
+
 }
 
 func TestConversation(t *testing.T) {
@@ -294,6 +300,11 @@ func TestConversation(t *testing.T) {
 		t.Errorf("Expected 1 line but got %d", len(got.Lines))
 	}
 
+	err = cli.DeleteLine(convo.ID, line1.ID)
+	if _, ok := err.(usererrors.NotFound); !ok {
+		t.Errorf("expected not found on already deleted line, got %s", err)
+	}
+
 	// delete conversation
 	if err := cli.DeleteConversation(convo.ID); err != nil {
 		t.Fatal(err)
@@ -302,6 +313,11 @@ func TestConversation(t *testing.T) {
 	_, err = cli.GetConversation(convo.ID)
 	if _, ok := err.(usererrors.NotFound); !ok {
 		t.Fatalf("expected NotFound for deleted conversation but got %s", err)
+	}
+
+	err = cli.DeleteConversation(convo.ID)
+	if _, ok := err.(usererrors.NotFound); !ok {
+		t.Errorf("expected not found on already deleted conversation, got %s", err)
 	}
 }
 
