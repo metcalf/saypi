@@ -3,11 +3,9 @@ package client
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"reflect"
 
@@ -56,29 +54,6 @@ func New(baseURL *url.URL, httpClient *http.Client) *Client {
 	return &Client{
 		baseURL: baseURL,
 		do:      httpClient.Do,
-	}
-}
-
-func NewForTest(srv http.Handler) *Client {
-	base := url.URL{}
-
-	return &Client{
-		baseURL: &base,
-		do: func(req *http.Request) (*http.Response, error) {
-			rr := httptest.NewRecorder()
-			srv.ServeHTTP(rr, req)
-
-			resp := http.Response{
-				Status:        fmt.Sprintf("%d %s", rr.Code, http.StatusText(rr.Code)),
-				StatusCode:    rr.Code,
-				Body:          ioutil.NopCloser(rr.Body),
-				Header:        rr.HeaderMap,
-				ContentLength: int64(rr.Body.Len()),
-				Request:       req,
-			}
-
-			return &resp, nil
-		},
 	}
 }
 
@@ -191,6 +166,16 @@ func (c *Client) Do(req *http.Request, v interface{}) (*http.Response, error) {
 
 func (c *Client) SetAuthorization(auth string) {
 	c.auth = auth
+}
+
+func (c *Client) Authorize() error {
+	user, err := c.CreateUser()
+	if err != nil {
+		return err
+	}
+	c.SetAuthorization(user.ID)
+
+	return nil
 }
 
 func (c *Client) execute(rt Route, rtVars Vars, form *url.Values, v interface{}) (*http.Response, error) {

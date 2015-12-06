@@ -6,30 +6,41 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalf/saypi/app"
 	"github.com/metcalf/saypi/apptest"
 	"github.com/metcalf/saypi/client"
 	"github.com/metcalf/saypi/say"
 	"github.com/metcalf/saypi/usererrors"
 )
 
-func TestAppGetAnimals(t *testing.T) {
-	cfg := &app.Configuration{}
-
-	a, err := app.NewForTest(cfg)
+func TestAppAuth(t *testing.T) {
+	cli, err := client.NewTestClient(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer a.Close()
-
-	cli := client.NewForTest(a)
+	defer cli.Close()
 
 	_, err = cli.GetAnimals()
 	if _, ok := err.(usererrors.BearerAuthRequired); !ok {
 		t.Fatalf("request was not rejected due to missing auth: %s", err)
 	}
 
-	cli.SetAuthorization(apptest.TestValidUser)
+	cli.SetAuthorization(apptest.TestInvalidUser)
+
+	_, err = cli.GetAnimals()
+	if _, ok := err.(usererrors.AuthInvalid); !ok {
+		t.Fatalf("request was not rejected due to invalid auth: %s", err)
+	}
+}
+
+func TestAppGetAnimals(t *testing.T) {
+	cli, err := client.NewTestClient(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	if err := cli.Authorize(); err != nil {
+		t.Fatal(err)
+	}
 
 	animals, err := cli.GetAnimals()
 	if err != nil {
@@ -42,16 +53,14 @@ func TestAppGetAnimals(t *testing.T) {
 }
 
 func TestAppBuiltinMoods(t *testing.T) {
-	cfg := &app.Configuration{}
-
-	a, err := app.NewForTest(cfg)
+	cli, err := client.NewTestClient(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer a.Close()
-
-	cli := client.NewForTest(a)
-	cli.SetAuthorization(apptest.TestValidUser)
+	defer cli.Close()
+	if err := cli.Authorize(); err != nil {
+		t.Fatal(err)
+	}
 
 	iter := cli.ListMoods(client.ListParams{})
 
@@ -94,16 +103,14 @@ func TestAppBuiltinMoods(t *testing.T) {
 }
 
 func TestAppMoods(t *testing.T) {
-	cfg := &app.Configuration{}
-
-	a, err := app.NewForTest(cfg)
+	cli, err := client.NewTestClient(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer a.Close()
-
-	cli := client.NewForTest(a)
-	cli.SetAuthorization(apptest.TestValidUser)
+	defer cli.Close()
+	if err := cli.Authorize(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Get a non-existent mood
 	_, err = cli.GetMood("cross")
@@ -177,16 +184,14 @@ func TestAppMoods(t *testing.T) {
 }
 
 func TestConversation(t *testing.T) {
-	cfg := &app.Configuration{}
-
-	a, err := app.NewForTest(cfg)
+	cli, err := client.NewTestClient(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer a.Close()
-
-	cli := client.NewForTest(a)
-	cli.SetAuthorization(apptest.TestValidUser)
+	defer cli.Close()
+	if err := cli.Authorize(); err != nil {
+		t.Fatal(err)
+	}
 
 	// CREATE
 	heading := "top of the world"
@@ -322,16 +327,14 @@ func TestConversation(t *testing.T) {
 }
 
 func TestInvalidParams(t *testing.T) {
-	cfg := &app.Configuration{}
-
-	a, err := app.NewForTest(cfg)
+	cli, err := client.NewTestClient(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer a.Close()
-
-	cli := client.NewForTest(a)
-	cli.SetAuthorization(apptest.TestValidUser)
+	defer cli.Close()
+	if err := cli.Authorize(); err != nil {
+		t.Fatal(err)
+	}
 
 	moodTests := []struct {
 		Mood    say.Mood

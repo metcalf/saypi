@@ -10,22 +10,17 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/metcalf/saypi/app"
 	"github.com/metcalf/saypi/apptest"
 	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/client"
 )
 
 func TestAppCreateAndGet(t *testing.T) {
-	cfg := &app.Configuration{}
-
-	a, err := app.NewForTest(cfg)
+	cli, err := client.NewTestClient(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer a.Close()
-
-	cli := client.NewForTest(a)
+	defer cli.Close()
 
 	user, err := cli.CreateUser()
 	if err != nil {
