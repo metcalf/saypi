@@ -155,29 +155,32 @@ type convoRec struct {
 func newRepository(db *sqlx.DB) (*repository, error) {
 	r := repository{db: db}
 
-	stmts := map[string]**sqlx.NamedStmt{
-		findMood:       &r.findMood,
-		setMood:        &r.setMood,
-		deleteMood:     &r.deleteMood,
-		insertConvo:    &r.insertConvo,
-		getConvo:       &r.getConvo,
-		deleteConvo:    &r.deleteConvo,
-		findConvoLines: &r.findConvoLines,
-		insertLine:     &r.insertLine,
-		getLine:        &r.getLine,
-		deleteLine:     &r.deleteLine,
+	stmts := []struct {
+		sqlStr string
+		stmt   **sqlx.NamedStmt
+	}{
+		{findMood, &r.findMood},
+		{setMood, &r.setMood},
+		{deleteMood, &r.deleteMood},
+		{insertConvo, &r.insertConvo},
+		{getConvo, &r.getConvo},
+		{deleteConvo, &r.deleteConvo},
+		{findConvoLines, &r.findConvoLines},
+		{insertLine, &r.insertLine},
+		{getLine, &r.getLine},
+		{deleteLine, &r.deleteLine},
 
-		fmt.Sprintf(listConvos, ">", "ASC"):  &r.listConvosAsc,
-		fmt.Sprintf(listConvos, "<", "DESC"): &r.listConvosDesc,
-		fmt.Sprintf(listMoods, ">", "ASC"):   &r.listMoodsAsc,
-		fmt.Sprintf(listMoods, "<", "DESC"):  &r.listMoodsDesc,
+		{fmt.Sprintf(listConvos, ">", "ASC"), &r.listConvosAsc},
+		{fmt.Sprintf(listConvos, "<", "DESC"), &r.listConvosDesc},
+		{fmt.Sprintf(listMoods, ">", "ASC"), &r.listMoodsAsc},
+		{fmt.Sprintf(listMoods, "<", "DESC"), &r.listMoodsDesc},
 	}
 
-	for sqlStr, stmt := range stmts {
-		prepped, err := db.PrepareNamed(sqlStr)
-		*stmt = prepped
+	for _, entry := range stmts {
+		prepped, err := db.PrepareNamed(entry.sqlStr)
+		*entry.stmt = prepped
 		if err != nil {
-			return nil, errors.Annotatef(err, "preparing statement %s", sqlStr)
+			return nil, errors.Annotatef(err, "preparing statement %s", entry.sqlStr)
 		}
 		r.closers = append(r.closers, prepped)
 	}
