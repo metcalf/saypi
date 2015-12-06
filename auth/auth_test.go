@@ -16,6 +16,8 @@ import (
 )
 
 func TestAppCreateAndGet(t *testing.T) {
+	t.Parallel()
+
 	cli, err := client.NewTestClient(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -49,6 +51,8 @@ func TestAppCreateAndGet(t *testing.T) {
 }
 
 func TestWrapC(t *testing.T) {
+	t.Parallel()
+
 	ctrl, err := auth.New(apptest.TestSecret)
 	if err != nil {
 		t.Fatal(err)

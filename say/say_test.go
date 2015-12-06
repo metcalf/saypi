@@ -1,19 +1,54 @@
 package say_test
 
 import (
+	"flag"
+	"log"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/metcalf/saypi/app"
 	"github.com/metcalf/saypi/apptest"
 	"github.com/metcalf/saypi/client"
+	"github.com/metcalf/saypi/dbutil"
 	"github.com/metcalf/saypi/say"
 	"github.com/metcalf/saypi/usererrors"
 )
 
+var cfg app.Configuration
+
+// TestMain defines a custom test runner that shares a single database
+// configuration between the tests in this package.
+func TestMain(m *testing.M) {
+	flag.Parse()
+
+	// Set up a database to be shared between tests
+	tdb, db, err := dbutil.NewTestDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	// We don't need the db handle
+	if err := db.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	cfg.DBDSN = dbutil.DefaultDataSource + " dbname=" + tdb.Name()
+
+	retVal := m.Run()
+
+	if err := tdb.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	os.Exit(retVal)
+}
+
 func TestAppAuth(t *testing.T) {
-	cli, err := client.NewTestClient(nil)
+	t.Parallel()
+
+	cli, err := client.NewTestClient(&cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +68,9 @@ func TestAppAuth(t *testing.T) {
 }
 
 func TestAppGetAnimals(t *testing.T) {
-	cli, err := client.NewTestClient(nil)
+	t.Parallel()
+
+	cli, err := client.NewTestClient(&cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +90,9 @@ func TestAppGetAnimals(t *testing.T) {
 }
 
 func TestAppBuiltinMoods(t *testing.T) {
-	cli, err := client.NewTestClient(nil)
+	t.Parallel()
+
+	cli, err := client.NewTestClient(&cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +142,9 @@ func TestAppBuiltinMoods(t *testing.T) {
 }
 
 func TestAppMoods(t *testing.T) {
-	cli, err := client.NewTestClient(nil)
+	t.Parallel()
+
+	cli, err := client.NewTestClient(&cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +225,9 @@ func TestAppMoods(t *testing.T) {
 }
 
 func TestConversation(t *testing.T) {
-	cli, err := client.NewTestClient(nil)
+	t.Parallel()
+
+	cli, err := client.NewTestClient(&cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +370,9 @@ func TestConversation(t *testing.T) {
 }
 
 func TestInvalidParams(t *testing.T) {
-	cli, err := client.NewTestClient(nil)
+	t.Parallel()
+
+	cli, err := client.NewTestClient(&cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
