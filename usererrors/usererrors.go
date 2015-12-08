@@ -135,24 +135,15 @@ func (e InvalidParams) Error() string {
 	return strings.Join(pms, " ")
 }
 
-// InternalFailure represents a prviate error with a unique identifier
-// that can be referenced in private application logs.
-type InternalFailure struct {
-	ID string `json:"id"`
-}
+// InternalFailure represents a prviate internal error.
+type InternalFailure struct{}
 
 // Code returns "internal_failure"
 func (e InternalFailure) Code() string { return "internal_failure" }
 
-// Error returns a generic internal error message with the provided ID
+// Error returns a generic internal error message
 func (e InternalFailure) Error() string {
-	st := http.StatusText(http.StatusInternalServerError)
-
-	if e.ID == "" {
-		return st
-	}
-
-	return fmt.Sprintf("%s (reference %q)", st, e.ID)
+	return http.StatusText(http.StatusInternalServerError)
 }
 
 // ActionNotAllowed describes an action that is not permitted.

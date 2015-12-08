@@ -3,7 +3,6 @@ package respond
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net"
 	"net/http"
 	"runtime"
@@ -19,6 +18,16 @@ import (
 	"github.com/metcalf/saypi/usererrors"
 )
 
+var thisFile string
+
+func init() {
+	var ok bool
+	_, thisFile, _, ok = runtime.Caller(1)
+	if !ok {
+		panic("Could not retrieve the name of the current file")
+	}
+}
+
 func isBrokenPipe(err error) bool {
 	if err == nil {
 		return false
@@ -31,6 +40,35 @@ func isBrokenPipe(err error) bool {
 	}
 
 	return false
+}
+
+func logError(ctx context.Context, err error, event string) {
+	var lines []string
+
+	for skip := 1; ; skip++ {
+		pc, file, linenum, ok := runtime.Caller(skip)
+		if ok && file != thisFile {
+			f := runtime.FuncForPC(pc)
+			line := fmt.Sprintf("%s:%d %s() event=%s", file, linenum, f.Name(), event)
+			lines = append(lines, line)
+			break
+		}
+	}
+
+	if wrapped, ok := err.(*errors.Err); ok {
+		for _, line := range wrapped.StackTrace() {
+			lines = append(lines, line)
+		}
+	}
+
+	if len(lines) > 1 {
+		logMutex.Lock()
+		defer logMutex.Unlock()
+	}
+
+	for _, line := range lines {
+		reqlog.Print(ctx, line)
+	}
 }
 
 // Data returns a JSON response with the provided data and HTTP status
@@ -47,9 +85,9 @@ func Data(ctx context.Context, w http.ResponseWriter, status int, data interface
 	}
 }
 
-// Error returns a JSON response for the provided UserError and HTTP
-// status code.
-func Error(ctx context.Context, w http.ResponseWriter, status int, uerr usererrors.UserError) {
+// UserError returns a JSON response for the provided UserError and
+// HTTP status code.
+func UserError(ctx context.Context, w http.ResponseWriter, status int, uerr usererrors.UserError) {
 	content, err := usererrors.MarshalJSON(uerr)
 	if err != nil {
 		panic(err)
@@ -63,7 +101,15 @@ func Error(ctx context.Context, w http.ResponseWriter, status int, uerr usererro
 
 // NotFound returns a JSON NotFound response with a 404 status.
 func NotFound(ctx context.Context, w http.ResponseWriter, _ *http.Request) {
-	Error(ctx, w, http.StatusNotFound, usererrors.NotFound{})
+	UserError(ctx, w, http.StatusNotFound, usererrors.NotFound{})
+}
+
+// InternalError returns an InternalFailure error with a 500 status code
+// and logs the error stacktrace.
+func InternalError(ctx context.Context, w http.ResponseWriter, err error) {
+	uerr := usererrors.InternalFailure{}
+	logError(ctx, err, uerr.Code())
+	UserError(ctx, w, http.StatusInternalServerError, uerr)
 }
 
 var logMutex sync.Mutex
@@ -73,40 +119,20 @@ var logMutex sync.Mutex
 func WrapPanicC(h goji.Handler) goji.Handler {
 	return goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		defer func() {
-			err := recover()
-			if err == nil {
+			recovered := recover()
+			if recovered == nil {
 				return
 			}
 
+			err, ok := recovered.(error)
+			if !ok {
+				err = fmt.Errorf("%s", err)
+			}
+
 			metrics.Increment("http.panics")
+			logError(ctx, err, "panic")
 
-			id := fmt.Sprintf("%016x", rand.Int63())
-			var lines []string
-
-			first := "event=panic"
-			pc, file, line, ok := runtime.Caller(3)
-			if ok {
-				f := runtime.FuncForPC(pc)
-				first = fmt.Sprintf("%s:%d %s() %s", file, line, f.Name(), first)
-			}
-			lines = append(lines, first)
-
-			if wrapped, ok := err.(*errors.Err); ok {
-				for _, line := range wrapped.StackTrace() {
-					lines = append(lines, line)
-				}
-			}
-
-			if len(lines) > 1 {
-				logMutex.Lock()
-				defer logMutex.Unlock()
-			}
-
-			for _, line := range lines {
-				reqlog.Printf(ctx, "(panic=%s) %s", id, line)
-			}
-
-			Error(ctx, w, http.StatusInternalServerError, usererrors.InternalFailure{id})
+			UserError(ctx, w, http.StatusInternalServerError, usererrors.InternalFailure{})
 		}()
 		h.ServeHTTPC(ctx, w, r)
 	})

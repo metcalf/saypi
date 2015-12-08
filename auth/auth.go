@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -35,12 +36,14 @@ func New(secret []byte) (*Controller, error) {
 func (c *Controller) CreateUser(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	id := make([]byte, idLen)
 	if _, err := rand.Read(id); err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	mac := hmac.New(sha256.New, c.secret)
 	if _, err := mac.Write(id); err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	msg := mac.Sum(id)
@@ -55,7 +58,8 @@ func (c *Controller) CreateUser(ctx context.Context, w http.ResponseWriter, r *h
 func (c *Controller) GetUser(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	id := pat.Param(ctx, "id")
 	if id == "" {
-		panic("GetUser called without an `id` URL Var")
+		respond.InternalError(ctx, w, errors.New("GetUser called without an `id` URL Var"))
+		return
 	}
 
 	if c.getUser(id) != nil {
@@ -70,7 +74,7 @@ func (c *Controller) WrapC(inner goji.Handler) goji.Handler {
 	return goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
-			respond.Error(ctx, w, http.StatusUnauthorized, usererrors.BearerAuthRequired{})
+			respond.UserError(ctx, w, http.StatusUnauthorized, usererrors.BearerAuthRequired{})
 			return
 		}
 
@@ -81,7 +85,7 @@ func (c *Controller) WrapC(inner goji.Handler) goji.Handler {
 			reqlog.SetContext(ctx, "user_id", user.ID)
 			inner.ServeHTTPC(ctx, w, r)
 		} else {
-			respond.Error(ctx, w, http.StatusUnauthorized, usererrors.AuthInvalid{})
+			respond.UserError(ctx, w, http.StatusUnauthorized, usererrors.AuthInvalid{})
 		}
 	})
 }

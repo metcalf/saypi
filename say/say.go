@@ -135,7 +135,7 @@ func (c *Controller) ListMoods(ctx context.Context, w http.ResponseWriter, r *ht
 
 	lArgs, uerr := getListArgs(r)
 	if uerr != nil {
-		respond.Error(ctx, w, http.StatusBadRequest, uerr)
+		respond.UserError(ctx, w, http.StatusBadRequest, uerr)
 		return
 	}
 
@@ -144,7 +144,8 @@ func (c *Controller) ListMoods(ctx context.Context, w http.ResponseWriter, r *ht
 		respondCursorNotFound(ctx, w, lArgs)
 		return
 	} else if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	respond.Data(ctx, w, http.StatusOK, listRes{
@@ -161,7 +162,8 @@ func (c *Controller) GetMood(ctx context.Context, w http.ResponseWriter, r *http
 
 	res, err := c.repo.GetMood(userID, name)
 	if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 	if res == nil {
 		respond.NotFound(ctx, w, r)
@@ -179,7 +181,8 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 	r.ParseForm()
 	err := decoder.Decode(&mood, r.PostForm)
 	if err != nil {
-		panic(err) // I believe this is unreachable
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	mood.Eyes = strings.Replace(mood.Eyes, "\x00", "", -1)
@@ -201,7 +204,7 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 	}
 
 	if uerr != nil {
-		respond.Error(ctx, w, http.StatusBadRequest, uerr)
+		respond.UserError(ctx, w, http.StatusBadRequest, uerr)
 		return
 	}
 
@@ -210,12 +213,13 @@ func (c *Controller) SetMood(ctx context.Context, w http.ResponseWriter, r *http
 
 	err = c.repo.SetMood(userID, &mood)
 	if err == errBuiltinMood {
-		respond.Error(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
+		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
 			Action: fmt.Sprintf("update built-in mood %s", name),
 		})
 		return
 	} else if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	respond.Data(ctx, w, http.StatusOK, mood)
@@ -226,14 +230,15 @@ func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *h
 	name := pat.Param(ctx, "mood")
 
 	if err := c.repo.DeleteMood(userID, name); err == errBuiltinMood {
-		respond.Error(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
+		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
 			Action: fmt.Sprintf("delete built-in mood %s", name),
 		})
 		return
 	} else if err == errRecordNotFound {
 		respond.NotFound(ctx, w, r)
 	} else if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -243,7 +248,7 @@ func (c *Controller) ListConversations(ctx context.Context, w http.ResponseWrite
 	userID := mustUserID(ctx)
 	lArgs, uerr := getListArgs(r)
 	if uerr != nil {
-		respond.Error(ctx, w, http.StatusBadRequest, uerr)
+		respond.UserError(ctx, w, http.StatusBadRequest, uerr)
 		return
 	}
 
@@ -252,7 +257,8 @@ func (c *Controller) ListConversations(ctx context.Context, w http.ResponseWrite
 		respondCursorNotFound(ctx, w, lArgs)
 		return
 	} else if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	respond.Data(ctx, w, http.StatusOK, listRes{
@@ -268,7 +274,7 @@ func (c *Controller) CreateConversation(ctx context.Context, w http.ResponseWrit
 
 	heading := strings.Replace(r.PostFormValue("heading"), "\x00", "", -1)
 	if cnt := utf8.RuneCountInString(heading); cnt > maxHeadingLength {
-		respond.Error(ctx, w, http.StatusBadRequest, usererrors.InvalidParams{{
+		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.InvalidParams{{
 			Params:  []string{"heading"},
 			Message: fmt.Sprintf("must be a string of less than %d characters", maxHeadingLength),
 		}})
@@ -277,7 +283,8 @@ func (c *Controller) CreateConversation(ctx context.Context, w http.ResponseWrit
 
 	convo, err := c.repo.NewConversation(userID, heading)
 	if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	respond.Data(ctx, w, http.StatusOK, convo)
@@ -289,7 +296,8 @@ func (c *Controller) GetConversation(ctx context.Context, w http.ResponseWriter,
 
 	convo, err := c.repo.GetConversation(userID, convoID)
 	if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 	if convo == nil {
 		respond.NotFound(ctx, w, r)
@@ -299,7 +307,8 @@ func (c *Controller) GetConversation(ctx context.Context, w http.ResponseWriter,
 	for i, Line := range convo.Lines {
 		convo.Lines[i].Output, err = c.renderLine(&Line)
 		if err != nil {
-			panic(err)
+			respond.InternalError(ctx, w, err)
+			return
 		}
 	}
 
@@ -313,7 +322,8 @@ func (c *Controller) DeleteConversation(ctx context.Context, w http.ResponseWrit
 	if err := c.repo.DeleteConversation(userID, convoID); err == errRecordNotFound {
 		respond.NotFound(ctx, w, r)
 	} else if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -352,7 +362,7 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 
 	text := strings.Replace(r.PostFormValue("text"), "\x00", "", -1)
 	if cnt := utf8.RuneCountInString(text); cnt > maxTextLength {
-		respond.Error(ctx, w, http.StatusBadRequest, usererrors.InvalidParams{{
+		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.InvalidParams{{
 			Params:  []string{"text"},
 			Message: fmt.Sprintf("must be a string of less than %d characters", maxTextLength),
 		}})
@@ -366,7 +376,8 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 
 	mood, err := c.repo.GetMood(userID, moodName)
 	if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 	if mood == nil {
 		uerr = append(uerr, usererrors.InvalidParamsEntry{
@@ -376,7 +387,7 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 	}
 
 	if uerr != nil {
-		respond.Error(ctx, w, http.StatusBadRequest, uerr)
+		respond.UserError(ctx, w, http.StatusBadRequest, uerr)
 		return
 	}
 
@@ -392,12 +403,14 @@ func (c *Controller) CreateLine(ctx context.Context, w http.ResponseWriter, r *h
 		// The underlying conversation does not exist
 		respond.NotFound(ctx, w, r)
 	} else if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	line.Output, err = c.renderLine(&line)
 	if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	respond.Data(ctx, w, http.StatusOK, line)
@@ -410,7 +423,8 @@ func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http
 
 	line, err := c.repo.GetLine(userID, convoID, lineID)
 	if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 	if line == nil {
 		respond.NotFound(ctx, w, r)
@@ -419,7 +433,8 @@ func (c *Controller) GetLine(ctx context.Context, w http.ResponseWriter, r *http
 
 	line.Output, err = c.renderLine(line)
 	if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	respond.Data(ctx, w, http.StatusOK, line)
@@ -433,7 +448,8 @@ func (c *Controller) DeleteLine(ctx context.Context, w http.ResponseWriter, r *h
 	if err := c.repo.DeleteLine(userID, convoID, lineID); err == errRecordNotFound {
 		respond.NotFound(ctx, w, r)
 	} else if err != nil {
-		panic(err)
+		respond.InternalError(ctx, w, err)
+		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -496,7 +512,7 @@ func respondCursorNotFound(ctx context.Context, w http.ResponseWriter, args list
 		cursorParam = "starting_after"
 	}
 
-	respond.Error(ctx, w, http.StatusBadRequest, usererrors.InvalidParams{{
+	respond.UserError(ctx, w, http.StatusBadRequest, usererrors.InvalidParams{{
 		Params:  []string{cursorParam},
 		Message: "must refer to an existing object",
 	}})

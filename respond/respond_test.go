@@ -69,13 +69,9 @@ func TestWrapPanic(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	interr, ok := uerr.(usererrors.InternalFailure)
+	_, ok := uerr.(usererrors.InternalFailure)
 	if !ok {
 		t.Errorf("expected an InternalFailure but got %#v", uerr)
-	}
-
-	if !strings.Contains(buf.String(), interr.ID) {
-		t.Errorf("error ID %q not present logs %s", interr.ID, buf.String())
 	}
 
 	t.Log(buf.String())
