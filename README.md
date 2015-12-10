@@ -58,27 +58,102 @@ our handlers and middleware with code that assumes an `http.Handler`.
 
 ## Error handling
 
-Our first Go applications sufferred from two major error handling
-problems.
+In our early Go applications we struggled to return useful errors to
+our users and log the right details for debugging. We tried various
+patterns that left us returning unhelpful errors, overly helpful
+errors that exposed us to SSRF vulnerabilities or, at best, poorly
+structured error data.
 
-First, unhandled errors would bubble up the stack and panic in the
-controller. We would report the stacktrace to Sentry but it was
-difficult to debug exactly where these errors originated (e.g. which
-query caused that uniqueness violation in the database?). We like the
-approach from [Juju's errors package](https://github.com/juju/errors)
-of wrapping errors to include information such as the original
-stacktrace. For unhandled errors we can log enough context to make
-debugging possible and for well-handled errors we can log additional
-context for operators while returning a sane response to the client.
+Errors may start deep in the application, far from the request
+handler.  In our Ruby applications this logic would throw a
+`UserError` that bubbles all the way up the stack into error handling
+middleware.  This deeply couples the entire application to a
+particular transport and assumptions about user permissions. In Go, we
+try to propogate useful types, following the patterns in the standard
+library.
 
-The second problem was returning useful error responses to the client.
-Early on, I introduced a (harmless) server-side request forgery
-vulnerability from an errant `err.Error()` return. I switched to
-returning minimal information with error responses, making my services
-harder to use. We've since settled on a pattern where all errors that
-can be returned to the user are represented by a string error code
-(such as "not_found"). All error codes in turn map to a different type
-in a single package in the application.
+In this snippet, the repository translates a known database error into
+a package-specific type. For unknown errors it uses
+[Juju's errors package](https://github.com/juju/errors) to trace the
+location we first saw the error for logging to the operator.
+
+```go
+var errCursorNotFound = errors.New("Invalid cursor")
+...
+func (r *repository) listUserMoods(...) ([]Mood, bool, error) {
+...
+	if err == sql.ErrNoRows {
+		return nil, false, errCursorNotFound
+	} else if err != nil {
+		return nil, false, errors.Trace(err)
+	}
+...
+}
+```
+
+Only when the error reaches the request handler (or very near it) do
+we determine how the error will translate into a serialized response
+to the user. If the controller recognizes the error, it will translate
+it into a concrete type that represents the error in a structured
+way. If the controller does not recognize the error it does not panic,
+it explicitly returns an error to the client. In either case, a helper
+serializes the error into JSON and responds over the wire.
+
+```go
+func (c *Controller) ListMoods(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+...
+	if err == errCursorNotFound {
+		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.InvalidParams{{
+			Params:  []string{cursorParam},
+			Message: "must refer to an existing object",
+		}})
+		return
+	} else if err != nil {
+		respond.InternalError(ctx, w, err)
+		return
+	}
+...
+}
+```
+
+Every error we return to the client is
+[represented by a concrete type](https://godoc.org/github.com/metcalf/saypi/usererrors)
+and each type corresponds to a unique string code. Applications can
+register custom error types specific to their application and use
+common types provided by the library. The library knows how to
+serialize and deserialize these types. Clients get access to
+structured, typed details on the error rather than having to parse
+arbitrary string messages and untyped metadata. Each error also
+generates a human-readable message for easier debugging on the wire.
+
+```go
+// This makes an HTTP request to the application
+err := cli.SetMood(&test.Mood)
+
+switch usererr := err.(type) {
+case nil:
+	log.Println("all good!")
+case usererrors.InvalidParams:
+	for _, param := range usererr {
+		log.Printf("%s: %s", param.Params, param.Message)
+	}
+case usererrors.NotFound:
+	log.Printf("You must be dreaming. There is no such %s.", usererr.Resource)
+default:
+	log.Printf("I have no idea what to do with a %s.", err)
+}
+```
+
+This pattern means that:
+* Low-level modules are not tightly coupled to the transport and user
+  permissions.
+* Selective tracing allows operators to debug errors that originate
+  deep in the stack.
+* Error responses contain information for human debuggers as well
+  as structured information for programmatic clients.
+* Golang clients can easily reify the original error type and
+  manipulate structured data.
+* We don't panic.
 
 ## Initialization and the `main` method
 
