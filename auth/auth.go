@@ -74,7 +74,7 @@ func (c *Controller) WrapC(inner goji.Handler) goji.Handler {
 	return goji.HandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
-			respond.UserError(ctx, w, http.StatusUnauthorized, usererrors.BearerAuthRequired{})
+			respond.UserError(ctx, w, http.StatusUnauthorized, BearerAuthRequired{})
 			return
 		}
 

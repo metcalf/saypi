@@ -1,9 +1,9 @@
 package usererrors
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"reflect"
 	"strings"
 )
@@ -33,7 +33,6 @@ func init() {
 	Register(InternalFailure{})
 	Register(ActionNotAllowed{})
 	Register(NotFound{})
-	Register(BearerAuthRequired{})
 	Register(AuthInvalid{})
 }
 
@@ -126,10 +125,37 @@ func (e InvalidParams) Code() string { return "invalid_params" }
 // When possible, the underlying data should be used instead to
 // separate errors by parameter.
 func (e InvalidParams) Error() string {
+	if len(e) == 0 {
+		return "Parameters you provided are invalid."
+	}
+
 	pms := make([]string, len(e))
 
 	for i, pm := range e {
-		pms[i] = fmt.Sprintf("%s: %s.", strings.Join(pm.Params, ", "), pm.Message)
+		var plural string
+		if len(pm.Params) > 1 {
+			plural = "s"
+		}
+
+		msg := pm.Message
+		if msg == "" {
+			msg = "provided is invalid"
+		}
+
+		var buf bytes.Buffer
+		for i, param := range pm.Params {
+			buf.WriteString(fmt.Sprintf("`%s`", param))
+			switch i {
+			case len(pm.Params) - 1:
+				buf.WriteString(" ")
+			case len(pm.Params) - 2:
+				buf.WriteString(" and ")
+			default:
+				buf.WriteString(", ")
+			}
+		}
+
+		pms[i] = fmt.Sprintf("Parameter%s %s%s.", plural, buf.String(), pm.Message)
 	}
 
 	return strings.Join(pms, " ")
@@ -143,7 +169,7 @@ func (e InternalFailure) Code() string { return "internal_failure" }
 
 // Error returns a generic internal error message
 func (e InternalFailure) Error() string {
-	return http.StatusText(http.StatusInternalServerError)
+	return "Internal error encountered."
 }
 
 // ActionNotAllowed describes an action that is not permitted.
@@ -156,7 +182,7 @@ func (e ActionNotAllowed) Code() string { return "action_not_allowed" }
 
 // Error returns a string describing the disallowed action
 func (e ActionNotAllowed) Error() string {
-	return fmt.Sprintf("you may not %s", e.Action)
+	return fmt.Sprintf("You may not %s.", e.Action)
 }
 
 // NotFound indicates that the requested resource could not be found.
@@ -166,18 +192,7 @@ type NotFound struct{}
 func (e NotFound) Code() string { return "not_found" }
 
 func (e NotFound) Error() string {
-	return "the requested resource could not be found"
-}
-
-// BearerAuthRequired indicates that you must provide a Bearer token
-// in the Authorization header.
-type BearerAuthRequired struct{}
-
-// Code returns "auth_required"
-func (e BearerAuthRequired) Code() string { return "bearer_auth_required" }
-
-func (e BearerAuthRequired) Error() string {
-	return "you must provide a Bearer token in the Authorization header"
+	return "The requested resource could not be found."
 }
 
 // AuthInvalid indicates that the authorization you provided is
@@ -188,37 +203,5 @@ type AuthInvalid struct{}
 func (e AuthInvalid) Code() string { return "auth_invalid" }
 
 func (e AuthInvalid) Error() string {
-	return "the authorization token you provided is invalid"
+	return "The authorization token you provided is invalid."
 }
-
-// Don't necessarily have a Cause,
-// Never need a Cause if it's a UserError?
-// Probably only want to wrap errors at lower levels and return user errors
-// at a higher level. Those facilities should be totally separate.
-// Don't care about propogating UserError around the stack
-
-// Need to be able to turn specific client fields red for invalid params
-// Return extra info like decline codes
-// Low-level authorization code should not have to know whether a user
-// is gated in to seeing detailed decline codes before propogating the
-// result to an upper level of the stack.
-
-/*
-Examples from other apps:
-type CardDeclined struct {
-	Reason      string
-	DeclineCode int
-}
-
-func (e CardDeclined) Code() errCode { return ErrCardDeclined }
-func (e CardDeclined) Error() string {
-	if e.Reason != "" {
-		return e.Reason
-	}
-	return "Your card was declined."
-}
-
-// NoParseableImage returns an error of type ErrNoParseableImage indicating that
-// no parseable image could be retrieved for the provided URL
-var NoParseableImage = userError{ErrNoParseableImage, "no parseable image could be retrieved for the provided URL"}
-*/

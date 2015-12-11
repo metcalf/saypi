@@ -121,10 +121,33 @@ and each type corresponds to a unique string code. Each error also
 generates a human-readable message for easier debugging on the wire.
 The library can serialize and deserialize these types to JSON.
 
+```go
+// InvalidParamsEntry represents a single error for InvalidParams
+type InvalidParamsEntry struct {
+	Params  []string `json:"params"`
+	Message string   `json:"message"`
+}
+
+// InvalidParams represents a list of parameter validation
+// errors. Each element in the list contains an explanation of the
+// error and a list of the parameters that failed.
+type InvalidParams []InvalidParamsEntry
+
+// Code returns "invalid_params"
+func (e InvalidParams) Code() string { return "invalid_params" }
+
+// Error returns a joined representation of parameter messages.
+// When possible, the underlying data should be used instead to
+// separate errors by parameter.
+func (e InvalidParams) Error() string {
+	...
+}
+```
+
 ```json
 {
   "code": "invalid_params",
-  "error": "starting_after: must refer to an existing object",
+  "error": "Parameter `starting_after` must refer to an existing object.",
   "data": [
     {
       "params": ["starting_after"],
@@ -216,10 +239,25 @@ message to the user. Though our error has limited structure this
 time, it has enough that the client could use it to customize
 the message to the user.
 
+```go
+// ActionNotAllowed describes an action that is not permitted.
+type ActionNotAllowed struct {
+	Action string `json:"action"`
+}
+
+// Code returns "action_not_allowed"
+func (e ActionNotAllowed) Code() string { return "action_not_allowed" }
+
+// Error returns a string describing the disallowed action
+func (e ActionNotAllowed) Error() string {
+	return fmt.Sprintf("You may not %s.", e.Action)
+}
+```
+
 ```json
 {
   "code": "action_not_allowed",
-  "error": "you may not delete a mood associated with 3 conversation lines",
+  "error": "You may not delete a mood associated with 3 conversation lines.",
   "data": {
     "action": "delete a mood associated with 3 conversation lines",
   }

@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/usererrors"
 )
 
@@ -16,7 +17,7 @@ func TestDecodeJSON(t *testing.T) {
 		1: usererrors.ActionNotAllowed{"doit"},
 		2: usererrors.InternalFailure{},
 		3: usererrors.NotFound{},
-		4: usererrors.BearerAuthRequired{},
+		4: auth.BearerAuthRequired{},
 		5: usererrors.AuthInvalid{},
 	}
 

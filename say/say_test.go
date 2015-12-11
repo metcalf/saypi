@@ -11,6 +11,7 @@ import (
 
 	"github.com/metcalf/saypi/app"
 	"github.com/metcalf/saypi/apptest"
+	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/client"
 	"github.com/metcalf/saypi/dbutil"
 	"github.com/metcalf/saypi/say"
@@ -55,7 +56,7 @@ func TestAppAuth(t *testing.T) {
 	defer cli.Close()
 
 	_, err = cli.GetAnimals()
-	if _, ok := err.(usererrors.BearerAuthRequired); !ok {
+	if _, ok := err.(auth.BearerAuthRequired); !ok {
 		t.Fatalf("request was not rejected due to missing auth: %s", err)
 	}
 
