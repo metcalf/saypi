@@ -1,3 +1,18 @@
+// Package usererrors marshals and unmarshals structured errors bound
+// for the end user of a service. It provides an interface for
+// registering custom error types in addition to a set of common basic
+// errors.
+//
+// Custom errors must conform to the UserError interface and should
+// call Register in the init function of the package in which they are
+// defined. The Code returned by the error must be unique across the
+// application and any packages it imports. The Error message returned
+// should be a complete and properly puntuated sentence that can be
+// displayed directly to the user. It should be generated exclusively
+// from the contents of the error type, not provided by the
+// caller. The provides the client the option of either displaying the
+// generated error message directly to the end user or generating a
+// custom message.
 package usererrors
 
 import (
