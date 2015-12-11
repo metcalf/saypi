@@ -237,7 +237,7 @@ func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *h
 		respond.NotFound(ctx, w, r)
 	} else if conflict, ok := err.(conflictErr); ok {
 		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
-			Action: fmt.Sprintf("delete mood associated with %d conversation lines", len(conflict.IDs)),
+			Action: fmt.Sprintf("delete a mood associated with %d conversation lines", len(conflict.IDs)),
 		})
 	} else if err != nil {
 		respond.InternalError(ctx, w, err)

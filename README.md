@@ -124,7 +124,7 @@ The library can serialize and deserialize these types to JSON.
 ```json
 {
   "code": "invalid_params",
-  "error": "`starting_after`: must refer to an existing object",
+  "error": "starting_after: must refer to an existing object",
   "data": [
     {
       "params": ["starting_after"],
@@ -163,6 +163,9 @@ user-visible message. In this case, if deletion fails due to a
 uniqueness violation, we return an error listing the conflicting IDs.
 
 ```go
+type conflictErr struct{ IDs []string }
+func (e conflictErr) Error() string { ... }
+
 func (r *repository) DeleteMood(userID, name string) error {
 	if isBuiltin(name) {
 		return errBuiltinMood
@@ -174,10 +177,6 @@ func (r *repository) DeleteMood(userID, name string) error {
 			return err
 		}
 
-		// List the lines that are preventing from deleting the mood.
-		// There's a per-user race condition here but since this is mostly
-		// meant to provide informative help, it's probably not worth
-		// wrapping the entire thing in a transaction.
 		var lineIDs []string
 		if err := r.findMoodLines.Select(&lineIDs, queryArgs); err != nil {
 			return errors.Trace(err)
@@ -200,21 +199,13 @@ func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *h
 	userID := mustUserID(ctx)
 	name := pat.Param(ctx, "mood")
 
-	if err := c.repo.DeleteMood(userID, name); err == errBuiltinMood {
-		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
-			Action: fmt.Sprintf("delete built-in mood %s", name),
-		})
-	} else if err == errRecordNotFound {
-		respond.NotFound(ctx, w, r)
-	} else if conflict, ok := err.(conflictErr); ok {
+	err := c.repo.DeleteMood(userID, name)
+	if conflict, ok := err.(conflictErr); ok {
 		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
 			Action: fmt.Sprintf("delete a mood associated with %d conversation lines", len(conflict.IDs)),
 		})
-	} else if err != nil {
-		respond.InternalError(ctx, w, err)
-	} else {
-		w.WriteHeader(http.StatusNoContent)
 	}
+	...
 }
 ```
 

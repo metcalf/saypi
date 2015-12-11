@@ -408,7 +408,7 @@ func (r *repository) DeleteMood(userID, name string) error {
 			return err
 		}
 
-		// List the lines that are preventing from deleting the mood.
+		// List the lines that are preventing us from deleting the mood.
 		// There's a per-user race condition here but since this is mostly
 		// meant to provide informative help, it's probably not worth
 		// wrapping the entire thing in a transaction.
