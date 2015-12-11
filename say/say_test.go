@@ -338,6 +338,14 @@ func TestConversation(t *testing.T) {
 		t.Errorf("Expected a list entry with no lines but got %d", len(got.Lines))
 	}
 
+	// Delete an in-use mood fails
+	err = cli.DeleteMood("cross")
+	if action, ok := err.(usererrors.ActionNotAllowed); !ok {
+		t.Errorf("expected ActionNotAllowed error, got %q", err)
+	} else if !strings.Contains(action.Action, "1") {
+		t.Errorf("expected error Action to reference to 1 line, got %q", action.Action)
+	}
+
 	// Delete line
 	if err := cli.DeleteLine(convo.ID, line1.ID); err != nil {
 		t.Fatal(err)

@@ -60,17 +60,16 @@ our handlers and middleware with code that assumes an `http.Handler`.
 
 In our early Go applications we struggled to return useful errors to
 our users and log the right details for debugging. We tried various
-patterns that left us returning unhelpful errors, overly helpful
+patterns that left us returning unhelpful errors, overly "helpful"
 errors that exposed us to SSRF vulnerabilities or, at best, poorly
 structured error data.
 
 Errors may start deep in the application, far from the request
-handler.  In our Ruby applications this logic would throw a
-`UserError` that bubbles all the way up the stack into error handling
-middleware.  This deeply couples the entire application to a
-particular transport and assumptions about user permissions. In Go, we
-try to propogate useful types, following the patterns in the standard
-library.
+handler. In our Ruby applications we would throw a `UserError` that
+bubbles all the way up the stack into error handling middleware.  This
+deeply couples the entire application to a particular transport and
+assumptions about user permissions. In Go, we prefer to propogate
+descriptive types, following the patterns in the standard library.
 
 In this snippet, the repository translates a known database error into
 a package-specific type. For unknown errors it uses
@@ -95,7 +94,7 @@ Only when the error reaches the request handler (or very near it) do
 we determine how the error will translate into a serialized response
 to the user. If the controller recognizes the error, it will translate
 it into a concrete type that represents the error in a structured
-way. If the controller does not recognize the error it does not panic,
+way. If the controller does not recognize the error it does not panic;
 it explicitly returns an error to the client. In either case, a helper
 serializes the error into JSON and responds over the wire.
 
@@ -118,13 +117,27 @@ func (c *Controller) ListMoods(ctx context.Context, w http.ResponseWriter, r *ht
 
 Every error we return to the client is
 [represented by a concrete type](https://godoc.org/github.com/metcalf/saypi/usererrors)
-and each type corresponds to a unique string code. Applications can
-register custom error types specific to their application and use
-common types provided by the library. The library knows how to
-serialize and deserialize these types. Clients get access to
-structured, typed details on the error rather than having to parse
-arbitrary string messages and untyped metadata. Each error also
+and each type corresponds to a unique string code. Each error also
 generates a human-readable message for easier debugging on the wire.
+The library can serialize and deserialize these types to JSON.
+
+```json
+{
+  "code": "invalid_params",
+  "error": "`starting_after`: must refer to an existing object",
+  "data": [
+    {
+      "params": ["starting_after"],
+      "message": "must refer to an existing object",
+    }
+  ]
+}
+```
+
+Applications can register custom error types in addition to common
+types provided by the library. Clients get access to structured, typed
+details on the error rather than having to parse arbitrary string
+messages and untyped metadata.
 
 ```go
 // This makes an HTTP request to the application
@@ -141,6 +154,91 @@ case usererrors.NotFound:
 	log.Printf("You must be dreaming. There is no such %s.", usererr.Resource)
 default:
 	log.Printf("I have no idea what to do with a %s.", err)
+}
+```
+
+For a somewhat more complex example, consider returning additional
+information from the repository layer and translating it into a
+user-visible message. In this case, if deletion fails due to a
+uniqueness violation, we return an error listing the conflicting IDs.
+
+```go
+func (r *repository) DeleteMood(userID, name string) error {
+	if isBuiltin(name) {
+		return errBuiltinMood
+	}
+
+	queryArgs := struct{ UserID, Name string }{userID, name}
+	if err := doDelete(r.deleteMood, queryArgs); err != nil {
+		if dbErr, ok := errors.Cause(err).(*pq.Error); !ok || dbErr.Code != dbErrFKViolation {
+			return err
+		}
+
+		// List the lines that are preventing from deleting the mood.
+		// There's a per-user race condition here but since this is mostly
+		// meant to provide informative help, it's probably not worth
+		// wrapping the entire thing in a transaction.
+		var lineIDs []string
+		if err := r.findMoodLines.Select(&lineIDs, queryArgs); err != nil {
+			return errors.Trace(err)
+		}
+
+		return conflictErr{lineIDs}
+	}
+
+	return nil
+}
+```
+
+Suppose, for example, we don't want to expose those IDs to the same
+clients who can delete moods. The request handler can translate the
+error from the repository into a sanitized message to the client that
+only contains a count of the conflicting IDs.
+
+```go
+func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	userID := mustUserID(ctx)
+	name := pat.Param(ctx, "mood")
+
+	if err := c.repo.DeleteMood(userID, name); err == errBuiltinMood {
+		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
+			Action: fmt.Sprintf("delete built-in mood %s", name),
+		})
+	} else if err == errRecordNotFound {
+		respond.NotFound(ctx, w, r)
+	} else if conflict, ok := err.(conflictErr); ok {
+		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
+			Action: fmt.Sprintf("delete a mood associated with %d conversation lines", len(conflict.IDs)),
+		})
+	} else if err != nil {
+		respond.InternalError(ctx, w, err)
+	} else {
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+```
+
+For a more privileged client, we might return a completely different
+error type that includes the actual IDs. In the client, we can type
+assert to retrieve the original error and, for example, display the
+message to the user. Though our error has limited structure this
+time, it has enough that the client could use it to customize
+the message to the user.
+
+```json
+{
+  "code": "action_not_allowed",
+  "error": "you may not delete a mood associated with 3 conversation lines",
+  "data": {
+    "action": "delete a mood associated with 3 conversation lines",
+  }
+}
+```
+
+```go
+err := cli.DeleteMood("cross")
+if action, ok := err.(usererrors.ActionNotAllowed); ok {
+    log.Printf("Seriously? You think you can just %s?", action.Action)
 }
 ```
 

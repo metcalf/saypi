@@ -20,6 +20,7 @@ const (
 	convoIDPrefix    = "cv_"
 	lineIDPrefix     = "ln_"
 	dbErrDupUnique   = "23505"
+	dbErrFKViolation = "23503"
 
 	listMoods = `
 SELECT id as int_id, name, eyes, tongue
@@ -84,6 +85,13 @@ LEFT JOIN moods ON lines.mood_id = moods.id
 WHERE conversation_id = :id
 ORDER BY lines.id ASC
 `
+	findMoodLines = `
+SELECT public_id as id
+FROM lines
+LEFT JOIN moods ON lines.mood_id = moods.id
+WHERE user_id = :user_id AND mood_name = :name
+ORDER BY lines.id ASC
+`
 	insertLine = `
 INSERT INTO LINES (public_id, animal, think, text, mood_name, mood_id, conversation_id)
 SELECT :public_id, :animal, :think, :text, :mood_name, :mood_id, :conversation_id
@@ -113,13 +121,21 @@ var errCursorNotFound = errors.New("Invalid cursor")
 var errBuiltinMood = errors.New("Cannot modify built-in moods")
 var errRecordNotFound = errors.New("Requested record was not found")
 
+type conflictErr struct {
+	IDs []string
+}
+
+func (e conflictErr) Error() string {
+	return fmt.Sprintf("Operation failed due to conflicts with: %s", e.IDs)
+}
+
 type repository struct {
 	db      *sqlx.DB
 	closers []io.Closer
 
 	listMoodsAsc, listMoodsDesc, findMood, deleteMood, setMood        *sqlx.NamedStmt
 	listConvosAsc, listConvosDesc, insertConvo, getConvo, deleteConvo *sqlx.NamedStmt
-	findConvoLines, insertLine, getLine, deleteLine                   *sqlx.NamedStmt
+	findConvoLines, findMoodLines, insertLine, getLine, deleteLine    *sqlx.NamedStmt
 }
 
 type listArgs struct {
@@ -165,6 +181,7 @@ func newRepository(db *sqlx.DB) (*repository, error) {
 		getConvo:       &r.getConvo,
 		deleteConvo:    &r.deleteConvo,
 		findConvoLines: &r.findConvoLines,
+		findMoodLines:  &r.findMoodLines,
 		insertLine:     &r.insertLine,
 		getLine:        &r.getLine,
 		deleteLine:     &r.deleteLine,
@@ -385,8 +402,22 @@ func (r *repository) DeleteMood(userID, name string) error {
 		return errBuiltinMood
 	}
 
-	if err := doDelete(r.deleteMood, struct{ UserID, Name string }{userID, name}); err != nil {
-		return err
+	queryArgs := struct{ UserID, Name string }{userID, name}
+	if err := doDelete(r.deleteMood, queryArgs); err != nil {
+		if dbErr, ok := errors.Cause(err).(*pq.Error); !ok || dbErr.Code != dbErrFKViolation {
+			return err
+		}
+
+		// List the lines that are preventing from deleting the mood.
+		// There's a per-user race condition here but since this is mostly
+		// meant to provide informative help, it's probably not worth
+		// wrapping the entire thing in a transaction.
+		var lineIDs []string
+		if err := r.findMoodLines.Select(&lineIDs, queryArgs); err != nil {
+			return errors.Trace(err)
+		}
+
+		return conflictErr{lineIDs}
 	}
 
 	return nil

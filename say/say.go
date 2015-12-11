@@ -233,15 +233,17 @@ func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *h
 		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
 			Action: fmt.Sprintf("delete built-in mood %s", name),
 		})
-		return
 	} else if err == errRecordNotFound {
 		respond.NotFound(ctx, w, r)
+	} else if conflict, ok := err.(conflictErr); ok {
+		respond.UserError(ctx, w, http.StatusBadRequest, usererrors.ActionNotAllowed{
+			Action: fmt.Sprintf("delete mood associated with %d conversation lines", len(conflict.IDs)),
+		})
 	} else if err != nil {
 		respond.InternalError(ctx, w, err)
-		return
+	} else {
+		w.WriteHeader(http.StatusNoContent)
 	}
-
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (c *Controller) ListConversations(ctx context.Context, w http.ResponseWriter, r *http.Request) {
