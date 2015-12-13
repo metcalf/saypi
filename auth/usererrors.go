@@ -9,7 +9,8 @@ type BearerAuthRequired struct{}
 // Code returns "auth_required"
 func (e BearerAuthRequired) Code() string { return "bearer_auth_required" }
 
-func (e BearerAuthRequired) Error() string {
+// Message returns a human-readable description of the error.
+func (e BearerAuthRequired) Message() string {
 	return "You must provide a Bearer token in the Authorization header."
 }
 

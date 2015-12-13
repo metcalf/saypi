@@ -1,7 +1,6 @@
 # saypi (say-pee-eye)
 
-Cowsay API to demonstrate several Golang design [patterns] we've used
-successfully at Stripe.
+Cowsay API to demonstrate several Golang design [patterns].
 
 ## API Docs
 
@@ -66,15 +65,15 @@ structured error data.
 
 Errors may start deep in the application, far from the request
 handler. In our Ruby applications we would throw a `UserError` that
-bubbles all the way up the stack into error handling middleware.  This
+bubbles all the way up the stack into error handling middleware. This
 deeply couples the entire application to a particular transport and
-assumptions about user permissions. In Go, we prefer to propogate
-descriptive types, following the patterns in the standard library.
+assumptions about user permissions. In Go, we prefer to think of errors
+in our code as a separate concept from error responses returned to
+the user.
 
 In this snippet, the repository translates a known database error into
-a package-specific type. For unknown errors it uses
-[Juju's errors package](https://github.com/juju/errors) to trace the
-location we first saw the error for logging to the operator.
+a package-specific type. For unknown errors it prepends useful context
+to the database error for later debugging.
 
 ```go
 var errCursorNotFound = errors.New("Invalid cursor")
@@ -84,18 +83,18 @@ func (r *repository) listUserMoods(...) ([]Mood, bool, error) {
 	if err == sql.ErrNoRows {
 		return nil, false, errCursorNotFound
 	} else if err != nil {
-		return nil, false, errors.Trace(err)
+		return nil, false, fmt.Errorf("listing mood: %v", err)
 	}
 ...
 }
 ```
 
-Only when the error reaches the request handler (or very near it) do
-we determine how the error will translate into a serialized response
-to the user. If the controller recognizes the error, it will translate
-it into a concrete type that represents the error in a structured
-way. If the controller does not recognize the error it does not panic;
-it explicitly returns an error to the client. In either case, a helper
+Only when the error reaches the request handler do we determine how
+the error will translate into a serialized response to the user. If
+the controller recognizes the error, it will translate it into a
+concrete type that represents the error in a structured way. If the
+controller does not recognize the error it does not panic; it
+explicitly returns a failure to the client. In either case, a helper
 serializes the error into JSON and responds over the wire.
 
 ```go
@@ -115,7 +114,7 @@ func (c *Controller) ListMoods(ctx context.Context, w http.ResponseWriter, r *ht
 }
 ```
 
-Every error we return to the client is
+Every error response we return to the client is
 [represented by a concrete type](https://godoc.org/github.com/metcalf/saypi/usererrors)
 and each type corresponds to a unique string code. Each error also
 generates a human-readable message for easier debugging on the wire.
@@ -136,10 +135,10 @@ type InvalidParams []InvalidParamsEntry
 // Code returns "invalid_params"
 func (e InvalidParams) Code() string { return "invalid_params" }
 
-// Error returns a joined representation of parameter messages.
+// Message returns a joined representation of parameter messages.
 // When possible, the underlying data should be used instead to
 // separate errors by parameter.
-func (e InvalidParams) Error() string {
+func (e InvalidParams) Message() string {
 	...
 }
 ```
@@ -147,7 +146,7 @@ func (e InvalidParams) Error() string {
 ```json
 {
   "code": "invalid_params",
-  "error": "Parameter `starting_after` must refer to an existing object.",
+  "message": "Parameter `starting_after` must refer to an existing object.",
   "data": [
     {
       "params": ["starting_after"],
@@ -166,16 +165,14 @@ messages and untyped metadata.
 // This makes an HTTP request to the application
 err := cli.SetMood(&test.Mood)
 
-switch usererr := err.(type) {
-case nil:
-	log.Println("all good!")
+switch usererr := client.UserError(err).(type) {
 case usererrors.InvalidParams:
 	for _, param := range usererr {
 		log.Printf("%s: %s", param.Params, param.Message)
 	}
 case usererrors.NotFound:
 	log.Printf("You must be dreaming. There is no such %s.", usererr.Resource)
-default:
+case nil:
 	log.Printf("I have no idea what to do with a %s.", err)
 }
 ```
@@ -196,13 +193,13 @@ func (r *repository) DeleteMood(userID, name string) error {
 
 	queryArgs := struct{ UserID, Name string }{userID, name}
 	if err := doDelete(r.deleteMood, queryArgs); err != nil {
-		if dbErr, ok := errors.Cause(err).(*pq.Error); !ok || dbErr.Code != dbErrFKViolation {
+		if dbErr, ok := err.(*pq.Error); !ok || dbErr.Code != dbErrFKViolation {
 			return err
 		}
 
 		var lineIDs []string
 		if err := r.findMoodLines.Select(&lineIDs, queryArgs); err != nil {
-			return errors.Trace(err)
+			return fmt.Errorf("listing lines for mood %q and user %q: %v", name, userID, err)
 		}
 
 		return conflictErr{lineIDs}
@@ -234,10 +231,9 @@ func (c *Controller) DeleteMood(ctx context.Context, w http.ResponseWriter, r *h
 
 For a more privileged client, we might return a completely different
 error type that includes the actual IDs. In the client, we can type
-assert to retrieve the original error and, for example, display the
-message to the user. Though our error has limited structure this
-time, it has enough that the client could use it to customize
-the message to the user.
+assert to retrieve the original error. Though our error has limited
+structure this time, it has enough that the client could use it to
+customize the message to the user.
 
 ```go
 // ActionNotAllowed describes an action that is not permitted.
@@ -248,8 +244,8 @@ type ActionNotAllowed struct {
 // Code returns "action_not_allowed"
 func (e ActionNotAllowed) Code() string { return "action_not_allowed" }
 
-// Error returns a string describing the disallowed action
-func (e ActionNotAllowed) Error() string {
+// Message returns a string describing the disallowed action
+func (e ActionNotAllowed) Message() string {
 	return fmt.Sprintf("You may not %s.", e.Action)
 }
 ```
@@ -257,7 +253,7 @@ func (e ActionNotAllowed) Error() string {
 ```json
 {
   "code": "action_not_allowed",
-  "error": "You may not delete a mood associated with 3 conversation lines.",
+  "message": "You may not delete a mood associated with 3 conversation lines.",
   "data": {
     "action": "delete a mood associated with 3 conversation lines",
   }
@@ -266,7 +262,7 @@ func (e ActionNotAllowed) Error() string {
 
 ```go
 err := cli.DeleteMood("cross")
-if action, ok := err.(usererrors.ActionNotAllowed); ok {
+if action, ok := client.UserError(err).(usererrors.ActionNotAllowed); ok {
     log.Printf("Seriously? You think you can just %s?", action.Action)
 }
 ```
@@ -274,8 +270,6 @@ if action, ok := err.(usererrors.ActionNotAllowed); ok {
 This pattern means that:
 * Low-level modules are not tightly coupled to the transport and user
   permissions.
-* Selective tracing allows operators to debug errors that originate
-  deep in the stack.
 * Error responses contain information for human debuggers as well
   as structured information for programmatic clients.
 * Golang clients can easily reify the original error type and

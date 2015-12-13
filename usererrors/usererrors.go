@@ -6,7 +6,7 @@
 // Custom errors must conform to the UserError interface and should
 // call Register in the init function of the package in which they are
 // defined. The Code returned by the error must be unique across the
-// application and any packages it imports. The Error message returned
+// application and any packages it imports. The Message returned
 // should be a complete and properly puntuated sentence that can be
 // displayed directly to the user. It should be generated exclusively
 // from the contents of the error type, not provided by the
@@ -27,17 +27,17 @@ import (
 // UserErrors should be instantiated at the package-level with
 // constant error strings.
 type UserError interface {
-	error
 	Code() string
+	Message() string
 }
 
 type userError struct {
-	CodeF  string `json:"code"`
-	ErrorF string `json:"error"`
+	CodeF    string `json:"code"`
+	MessageF string `json:"message"`
 }
 
-func (e userError) Code() string  { return e.CodeF }
-func (e userError) Error() string { return e.ErrorF }
+func (e userError) Code() string    { return e.CodeF }
+func (e userError) Message() string { return e.MessageF }
 
 var registered map[string]reflect.Type
 
@@ -104,7 +104,7 @@ func MarshalJSON(uerr UserError) ([]byte, error) {
 		userError
 		Data interface{} `json:"data,omitempty"`
 	}
-	content.userError = userError{uerr.Code(), uerr.Error()}
+	content.userError = userError{uerr.Code(), uerr.Message()}
 
 	switch tp := reflect.Indirect(reflect.ValueOf(uerr)); tp.Kind() {
 	case reflect.Array, reflect.Map, reflect.Slice:
@@ -136,10 +136,10 @@ type InvalidParams []InvalidParamsEntry
 // Code returns "invalid_params"
 func (e InvalidParams) Code() string { return "invalid_params" }
 
-// Error returns a joined representation of parameter messages.
+// Message returns a joined representation of parameter messages.
 // When possible, the underlying data should be used instead to
 // separate errors by parameter.
-func (e InvalidParams) Error() string {
+func (e InvalidParams) Message() string {
 	if len(e) == 0 {
 		return "Parameters you provided are invalid."
 	}
@@ -182,8 +182,8 @@ type InternalFailure struct{}
 // Code returns "internal_failure"
 func (e InternalFailure) Code() string { return "internal_failure" }
 
-// Error returns a generic internal error message
-func (e InternalFailure) Error() string {
+// Message returns a generic internal error message
+func (e InternalFailure) Message() string {
 	return "Internal error encountered."
 }
 
@@ -195,8 +195,8 @@ type ActionNotAllowed struct {
 // Code returns "action_not_allowed"
 func (e ActionNotAllowed) Code() string { return "action_not_allowed" }
 
-// Error returns a string describing the disallowed action
-func (e ActionNotAllowed) Error() string {
+// Message returns a string describing the disallowed action
+func (e ActionNotAllowed) Message() string {
 	return fmt.Sprintf("You may not %s.", e.Action)
 }
 
@@ -206,7 +206,8 @@ type NotFound struct{}
 // Code returns "not_found"
 func (e NotFound) Code() string { return "not_found" }
 
-func (e NotFound) Error() string {
+// Message returns a generic not found message.
+func (e NotFound) Message() string {
 	return "The requested resource could not be found."
 }
 
@@ -217,6 +218,7 @@ type AuthInvalid struct{}
 // Code returns "auth_invalid"
 func (e AuthInvalid) Code() string { return "auth_invalid" }
 
-func (e AuthInvalid) Error() string {
+// Message returns a generic unauthorized message.
+func (e AuthInvalid) Message() string {
 	return "The authorization token you provided is invalid."
 }

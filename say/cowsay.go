@@ -1,12 +1,12 @@
 package say
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/juju/errors"
 	"github.com/metcalf/saypi/say/internal/cows"
 	"github.com/mitchellh/go-wordwrap"
 )
@@ -25,7 +25,7 @@ func newCow(name string) (*cow, error) {
 
 	tmpl, err := cows.Asset(name + ".cow")
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 
 	return &cow{

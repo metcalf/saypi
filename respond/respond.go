@@ -12,7 +12,6 @@ import (
 	"goji.io"
 	"golang.org/x/net/context"
 
-	"github.com/juju/errors"
 	"github.com/metcalf/saypi/metrics"
 	"github.com/metcalf/saypi/reqlog"
 	"github.com/metcalf/saypi/usererrors"
@@ -45,20 +44,20 @@ func isBrokenPipe(err error) bool {
 func logError(ctx context.Context, err error, event string) {
 	var lines []string
 
+	lines = append(lines, fmt.Sprintf("event=%s %s", event, err))
+
 	for skip := 1; ; skip++ {
 		pc, file, linenum, ok := runtime.Caller(skip)
-		if ok && file != thisFile {
-			f := runtime.FuncForPC(pc)
-			line := fmt.Sprintf("%s:%d %s() event=%s", file, linenum, f.Name(), event)
-			lines = append(lines, line)
+		if !ok {
 			break
 		}
-	}
-
-	if wrapped, ok := err.(*errors.Err); ok {
-		for _, line := range wrapped.StackTrace() {
-			lines = append(lines, line)
+		if file[len(file)-1] == 'c' || file == thisFile {
+			continue
 		}
+
+		f := runtime.FuncForPC(pc)
+		line := fmt.Sprintf("%s:%d %s()", file, linenum, f.Name())
+		lines = append(lines, line)
 	}
 
 	if len(lines) > 1 {

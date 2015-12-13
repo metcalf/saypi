@@ -34,12 +34,12 @@ func TestDecodeJSON(t *testing.T) {
 		}
 	}
 
-	unknownJSON := []byte(`{"code":"foo","error":"bar"}`)
+	unknownJSON := []byte(`{"code":"foo","message":"bar"}`)
 	if res, err := usererrors.UnmarshalJSON(unknownJSON); err != nil {
 		t.Error(err)
 	} else if res.Code() != "foo" {
 		t.Errorf("code=%q, expected %q", res.Code(), "foo")
-	} else if have := res.Error(); have != "bar" {
+	} else if have := res.Message(); have != "bar" {
 		t.Errorf("error=%q, want %q", have, "bar")
 	}
 }

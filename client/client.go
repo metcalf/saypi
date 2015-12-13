@@ -3,6 +3,8 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -10,7 +12,6 @@ import (
 	"reflect"
 
 	"github.com/google/go-querystring/query"
-	"github.com/juju/errors"
 	"github.com/metcalf/saypi/app"
 	"github.com/metcalf/saypi/auth"
 	"github.com/metcalf/saypi/say"
@@ -67,12 +68,12 @@ func (c *Client) NewRequest(rt Route, rtVars Vars, form *url.Values) (*http.Requ
 
 	path, err := rt.URLPath(vars)
 	if err != nil {
-		return nil, errors.Annotate(err, "unable to generate request path")
+		return nil, fmt.Errorf("unable to generate request path (%v)", err)
 	}
 
 	rel, err := url.Parse(path)
 	if err != nil {
-		return nil, errors.Annotatef(err, "unparseable request path %q", path)
+		return nil, fmt.Errorf("path %q is not parseable (%v)", path, err)
 	}
 
 	var method string
@@ -89,7 +90,7 @@ func (c *Client) NewRequest(rt Route, rtVars Vars, form *url.Values) (*http.Requ
 		for _, m := range methods {
 			if m != "HEAD" && m != "OPTIONS" {
 				if method != "" {
-					return nil, errors.Errorf("route defines multiple non-HEAD/OPTIONS methods: %s", methods)
+					return nil, fmt.Errorf("route defines multiple non-HEAD/OPTIONS methods: %s", methods)
 				}
 				method = m
 			}
@@ -131,7 +132,7 @@ func (c *Client) NewRequest(rt Route, rtVars Vars, form *url.Values) (*http.Requ
 func (c *Client) Do(req *http.Request, v interface{}) (*http.Response, error) {
 	rv := reflect.ValueOf(v)
 	if !(v == nil || rv.Kind() == reflect.Ptr) {
-		return nil, errors.Errorf("value must be a pointer or nil not %s", reflect.TypeOf(v).String())
+		return nil, fmt.Errorf("value must be a pointer or nil not %s", reflect.TypeOf(v).String())
 	}
 
 	resp, err := c.do(req)
@@ -143,21 +144,21 @@ func (c *Client) Do(req *http.Request, v interface{}) (*http.Response, error) {
 	if resp.StatusCode > 399 {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return resp, errors.Annotate(err, "unable to read response body")
+			return resp, fmt.Errorf("unable to read response body (%v)", err)
 		}
 
 		uerr, err := usererrors.UnmarshalJSON(body)
 		if err != nil {
-			return resp, errors.Annotate(err, "unable to parse error body")
+			return resp, fmt.Errorf("unable to parse error body (%v)", err)
 		}
-		return resp, uerr
+		return resp, userError{uerr}
 	} else if resp.StatusCode > 299 || resp.StatusCode < 199 {
-		return resp, errors.Errorf("unexpected status code %d", resp.StatusCode)
+		return resp, fmt.Errorf("unexpected status code %d", resp.StatusCode)
 	}
 
 	if v != nil {
 		if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
-			return resp, errors.Annotate(err, "unable to parse response body")
+			return resp, fmt.Errorf("unable to parse response body (%v)", err)
 		}
 	}
 
@@ -205,7 +206,7 @@ func (c *Client) CreateUser() (*auth.User, error) {
 
 func (c *Client) UserExists(id string) (bool, error) {
 	resp, err := c.execute(app.Routes.GetUser, &auth.User{ID: id}, nil, nil)
-	if _, ok := err.(usererrors.NotFound); ok {
+	if _, ok := UserError(err).(usererrors.NotFound); ok {
 		return false, nil
 	} else if err != nil {
 		return false, err

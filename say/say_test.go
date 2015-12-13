@@ -56,14 +56,14 @@ func TestAppAuth(t *testing.T) {
 	defer cli.Close()
 
 	_, err = cli.GetAnimals()
-	if _, ok := err.(auth.BearerAuthRequired); !ok {
+	if _, ok := client.UserError(err).(auth.BearerAuthRequired); !ok {
 		t.Fatalf("request was not rejected due to missing auth: %s", err)
 	}
 
 	cli.SetAuthorization(apptest.TestInvalidUser)
 
 	_, err = cli.GetAnimals()
-	if _, ok := err.(usererrors.AuthInvalid); !ok {
+	if _, ok := client.UserError(err).(usererrors.AuthInvalid); !ok {
 		t.Fatalf("request was not rejected due to invalid auth: %s", err)
 	}
 }
@@ -132,12 +132,12 @@ func TestAppBuiltinMoods(t *testing.T) {
 		Name: "borg",
 		Eyes: "--",
 	})
-	if _, ok := err.(usererrors.ActionNotAllowed); !ok {
+	if _, ok := client.UserError(err).(usererrors.ActionNotAllowed); !ok {
 		t.Errorf("expected an ActionNotAllowed but got %s", err)
 	}
 
 	err = cli.DeleteMood("borg")
-	if _, ok := err.(usererrors.ActionNotAllowed); !ok {
+	if _, ok := client.UserError(err).(usererrors.ActionNotAllowed); !ok {
 		t.Errorf("expected an ActionNotAllowed but got %s", err)
 	}
 }
@@ -156,7 +156,7 @@ func TestAppMoods(t *testing.T) {
 
 	// Get a non-existent mood
 	_, err = cli.GetMood("cross")
-	if _, ok := err.(usererrors.NotFound); !ok {
+	if _, ok := client.UserError(err).(usererrors.NotFound); !ok {
 		t.Errorf("expected NotFound for nonexistent mood but got %s", err)
 	}
 
@@ -214,12 +214,12 @@ func TestAppMoods(t *testing.T) {
 	}
 
 	_, err = cli.GetMood("cross")
-	if _, ok := err.(usererrors.NotFound); !ok {
+	if _, ok := client.UserError(err).(usererrors.NotFound); !ok {
 		t.Errorf("expected NotFound after deleting mood but got %s", err)
 	}
 
 	err = cli.DeleteMood("cross")
-	if _, ok := err.(usererrors.NotFound); !ok {
+	if _, ok := client.UserError(err).(usererrors.NotFound); !ok {
 		t.Errorf("expected NotFound on an already deleted mood but got %s", err)
 	}
 
@@ -341,7 +341,7 @@ func TestConversation(t *testing.T) {
 
 	// Delete an in-use mood fails
 	err = cli.DeleteMood("cross")
-	if action, ok := err.(usererrors.ActionNotAllowed); !ok {
+	if action, ok := client.UserError(err).(usererrors.ActionNotAllowed); !ok {
 		t.Errorf("expected ActionNotAllowed error, got %q", err)
 	} else if !strings.Contains(action.Action, "1") {
 		t.Errorf("expected error Action to reference to 1 line, got %q", action.Action)
@@ -358,7 +358,7 @@ func TestConversation(t *testing.T) {
 	}
 
 	err = cli.DeleteLine(convo.ID, line1.ID)
-	if _, ok := err.(usererrors.NotFound); !ok {
+	if _, ok := client.UserError(err).(usererrors.NotFound); !ok {
 		t.Errorf("expected not found on already deleted line, got %s", err)
 	}
 
@@ -368,12 +368,12 @@ func TestConversation(t *testing.T) {
 	}
 
 	_, err = cli.GetConversation(convo.ID)
-	if _, ok := err.(usererrors.NotFound); !ok {
+	if _, ok := client.UserError(err).(usererrors.NotFound); !ok {
 		t.Fatalf("expected NotFound for deleted conversation but got %s", err)
 	}
 
 	err = cli.DeleteConversation(convo.ID)
-	if _, ok := err.(usererrors.NotFound); !ok {
+	if _, ok := client.UserError(err).(usererrors.NotFound); !ok {
 		t.Errorf("expected not found on already deleted conversation, got %s", err)
 	}
 }
@@ -412,7 +412,7 @@ func TestInvalidParams(t *testing.T) {
 				t.Errorf("%d: unexpected %s", i, err)
 			}
 		} else {
-			ip, ok := err.(usererrors.InvalidParams)
+			ip, ok := client.UserError(err).(usererrors.InvalidParams)
 			if !ok {
 				t.Errorf("%d: expected InvalidParams got %s", i, err)
 				continue
@@ -444,7 +444,7 @@ func TestInvalidParams(t *testing.T) {
 				t.Errorf("%d: unexpected %s", i, err)
 			}
 		} else {
-			ip, ok := err.(usererrors.InvalidParams)
+			ip, ok := client.UserError(err).(usererrors.InvalidParams)
 			if !ok {
 				t.Errorf("%d: expected InvalidParams got %s", i, err)
 				continue
@@ -481,7 +481,7 @@ func TestInvalidParams(t *testing.T) {
 				t.Errorf("%d: unexpected %s", i, err)
 			}
 		} else {
-			ip, ok := err.(usererrors.InvalidParams)
+			ip, ok := client.UserError(err).(usererrors.InvalidParams)
 			if !ok {
 				t.Errorf("%d: expected InvalidParams got %s", i, err)
 				continue
